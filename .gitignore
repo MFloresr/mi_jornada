@@ -13,7 +13,6 @@ media/
 
 # Node/Vue
 node_modules/
-dist/
 *.log
 
 # IDEs / Editores
