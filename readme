@@ -1,0 +1,252 @@
+# Time Tracker Multiusuario (Django + Vue + Tailwind)
+
+Aplicación web para **gestionar horas de trabajo** de varios usuarios.  
+Permite registrar jornadas, calcular horas trabajadas (restando comida si aplica) y calcular el sueldo según un **sueldo por hora configurable** por cada usuario.
+
+---
+
+## 🚀 Objetivo del proyecto
+
+Crear un sistema **multiusuario** donde cada persona pueda:
+
+- Registrar sus horas de trabajo (fecha, hora de entrada y salida).
+- Indicar si ha tenido **descanso de comida** ese día (restando 1h).
+- Calcular automáticamente las **horas trabajadas reales**.
+- Calcular automáticamente el **sueldo generado** por cada registro.
+- Ver un **dashboard** con totales de horas y sueldo por día, semana y mes.
+- Gestionar sus registros desde un **calendario interactivo**.
+
+Además, un usuario **admin** puede ver todos los registros, filtrarlos y exportarlos.
+
+---
+
+## 🧱 Stack tecnológico
+
+### Backend
+
+- **Django 5.x**
+- Auth integrada de Django (usuarios, login, logout).
+- Modelos:
+  - `Profile` (extiende `User` con sueldo por hora).
+  - `Registro` (una fila por jornada de trabajo).
+- API (views Django / DRF) para:
+  - CRUD de registros.
+  - Totales (horas y sueldo).
+  - Sugerencias de lugares para autocompletado.
+
+### Frontend
+
+- **Vue 3** (Composition API).
+- **Motion One** (animaciones profesionales).
+- **Tailwind CSS 3.x** (utilidades CSS).
+- **DaisyUI 4.x** (componentes UI y temas).
+- **FullCalendar.js** para calendario interactivo.
+- **Axios** para consumir la API de Django.
+
+### Otros
+
+- **date-fns** para manejo de fechas en frontend.
+- **SQLite** en desarrollo, **PostgreSQL** en producción.
+- Despliegue previsto en **PythonAnywhere**.
+
+---
+
+## 👥 Roles y permisos
+
+### Usuario normal
+
+Puede:
+
+- Configurar su **sueldo por hora** desde la pantalla de perfil.
+- Crear registros de tiempo con:
+  - Fecha (cualquier día, pasado o futuro).
+  - Hora de entrada.
+  - Hora de salida.
+  - Descripción opcional.
+  - Lugar (con autocompletado).
+  - Checkbox de **“restar 1h de comida”**.
+- Editar y borrar **solo sus propios registros**.
+- Ver:
+  - Dashboard con tarjetas:
+    - Horas hoy / semana / mes.
+    - Sueldo hoy / semana / mes.
+  - Calendario interactivo con los días que tienen registros.
+
+### Admin
+
+Puede:
+
+- Ver una **tabla global** con todos los registros de todos los usuarios.
+- Filtrar por fecha, usuario y lugar.
+- Editar y borrar registros de cualquier usuario.
+- Ver totales globales de horas y sueldo.
+- Gestionar usuarios desde el admin de Django.
+
+---
+
+## 📝 Modelos de datos
+
+### Profile
+
+Extiende al usuario de Django para guardar el sueldo por hora.
+
+```python
+class Profile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    sueldo_por_hora = models.DecimalField(
+        max_digits=6, decimal_places=2, default=10.00
+    )
+
+    def __str__(self):
+        return f"{self.user.username} - {self.sueldo_por_hora}€/h"
+```
+
+### Registro
+
+Guarda una jornada de trabajo concreta.
+
+```python
+class Registro(models.Model):
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE)
+    fecha = models.DateField()
+    hora_entrada = models.TimeField()
+    hora_salida = models.TimeField()
+    descripcion = models.TextField(blank=True)
+    lugar = models.CharField(max_length=200)
+    descanso_comida = models.BooleanField(default=False)
+    sueldo_por_hora = models.DecimalField(max_digits=6, decimal_places=2)
+
+    duracion_total = models.DurationField(editable=False)
+    duracion_trabajada = models.DurationField(editable=False)
+    sueldo_registro = models.DecimalField(
+        max_digits=8, decimal_places=2, editable=False
+    )
+
+    def save(self, *args, **kwargs):
+        # Calcular duración total y trabajada,
+        # y el sueldo del registro antes de guardar.
+        ...
+        super().save(*args, **kwargs)
+```
+
+Campos clave:
+
+- `descanso_comida`: si está marcado, se resta **1h** de la duración total.
+- `sueldo_por_hora`: se copia el valor actual del usuario en el momento del registro, para mantener historial.
+- `sueldo_registro`: se calcula automáticamente como `horas_trabajadas × sueldo_por_hora`.
+
+---
+
+## 🧮 Lógica de cálculo
+
+1. **Duración total**:
+   - `duracion_total = hora_salida - hora_entrada`
+2. **Duración trabajada**:
+   - Si `descanso_comida` → `duracion_trabajada = duracion_total - 1h`
+   - Si no → `duracion_trabajada = duracion_total`
+3. **Horas trabajadas (en decimal)**:
+   - `horas_trabajadas = duracion_trabajada.total_seconds() / 3600`
+4. **Sueldo del registro**:
+   - `sueldo_registro = horas_trabajadas × sueldo_por_hora`
+
+Estos campos se calculan en `save()` del modelo.
+
+---
+
+## 🎨 Interfaz de usuario (resumen)
+
+### Dashboard usuario
+
+- Navbar con:
+  - Nombre del usuario.
+  - Sueldo por hora actual.
+  - Toggle de **modo oscuro/claro**.
+- Tarjetas animadas con:
+  - Horas hoy / semana / mes.
+  - Sueldo hoy / semana / mes.
+- Calendario interactivo:
+  - Días con registros marcados.
+  - Click en día → lista de registros de ese día (editable).
+- Botón **“Nueva entrada”** que abre un modal.
+
+### Modal “Nueva entrada”
+
+Campos:
+
+- Fecha.
+- Hora de entrada y salida.
+- Descripción.
+- Lugar con autocompletado (lugares ya usados por el usuario).
+- Checkbox **“Restar 1h de comida”**.
+- Campo de sueldo/hora (relleno por defecto con el del perfil, pero editable).
+
+En el modal se muestra un **preview** en tiempo real:
+
+- Duración total.
+- Duración trabajada (con o sin comida).
+- Sueldo del registro.
+
+### Pantalla Admin
+
+- Tabla global con:
+  - Fecha, usuario, entrada, salida, horas, comida, sueldo, lugar.
+- Filtros por:
+  - Rango de fechas.
+  - Usuario.
+  - Lugar.
+- Botón para **exportar CSV** (FASE 2).
+- Totales globales (horas y sueldo) para el rango filtrado.
+
+---
+
+## 🌈 Estilo y animaciones
+
+- **Tailwind CSS** para layout, responsive y utilidades.
+- **DaisyUI** para:
+  - Navbar, buttons, cards, modal, tablas, etc.
+  - Temas `light` y `dark`.
+- **Motion One** para animaciones:
+  - Navbar entrando con efecto spring.
+  - Tarjetas con animación de entrada y hover (scale).
+  - Modal con fade in/out.
+  - Stagger de elementos al cargar dashboard.
+
+---
+
+## 📦 Fases de desarrollo
+
+### Fase 1 – Funcional básico
+
+- [ ] Configurar proyecto Django y app `time_tracker`.
+- [ ] Crear modelos `Profile` y `Registro`.
+- [ ] Configurar auth (login, logout, registro).
+- [ ] Crear API básica para registros (listar, crear, editar, borrar).
+- [ ] Configurar Vue 3 + Vite + Tailwind + DaisyUI.
+- [ ] Implementar:
+  - Dashboard usuario (tarjetas + calendario).
+  - Modal nueva entrada con preview.
+  - Autocompletado de lugares.
+- [ ] Configurar modo oscuro/claro.
+- [ ] Configurar admin de Django para ver registros.
+
+### Fase 2 – Mejoras
+
+- [ ] Dashboard admin completo (tabla + filtros).
+- [ ] Exportar CSV desde admin.
+- [ ] Validaciones extra (ej: entrada < salida).
+- [ ] Ajustes de diseño y UX.
+
+### Fase 3 – Opcional
+
+- [ ] Gráficos (Chart.js) de horas/sueldo.
+- [ ] Exportar PDF de reportes.
+- [ ] Notificaciones / recordatorios.
+- [ ] API REST completa para app móvil.
+
+---
+
+## 🏁 Estado
+
+- Diseño funcional: ✅ Definido.
+- Stack tecnológico: ✅ Definido (Django + Vue 3 + Tailwind + DaisyUI + Motion One).
+- Siguiente paso: **empezar Fase 1** (modelos + configuración base de Django y Vue).
