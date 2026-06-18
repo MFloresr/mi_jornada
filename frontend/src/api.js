@@ -9,7 +9,7 @@ function getCookie(name) {
 }
 
 const api = axios.create({
-  baseURL: "http://localhost:8000/api/",
+  baseURL: "https://mflores.pythonanywhere.com/api/",
   //baseURL: "http://192.168.1.119:8000/api/",
   withCredentials: true,
 });
