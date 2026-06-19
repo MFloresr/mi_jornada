@@ -101,7 +101,7 @@ USE_TZ = True
 # --- Static files (requerido en PythonAnywhere) ---
 
 STATIC_URL = "/static/"
-STATIC_ROOT = os.path.join(BASE_DIR, "staticroot")  # carpeta para collectstatic [web:40][web:46][web:47]
+STATIC_ROOT = os.path.join(BASE_DIR, "static_root")  # carpeta para collectstatic [web:40][web:46][web:47]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
