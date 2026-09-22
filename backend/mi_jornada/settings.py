@@ -1,24 +1,35 @@
 from pathlib import Path
 import os
 
+import dj_database_url
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Vercel define VERCEL=1 tanto en el build como en ejecución
+ON_VERCEL = bool(os.environ.get("VERCEL"))
 
 # --- Seguridad / entorno ---
 
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "django-insecure-gkr3_jux!5p6p%nf5acx40nlp(ra1%xd*xj5!5kxn6qlax_=#y",  # solo fallback para desarrollo
-)
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if ON_VERCEL:
+        raise RuntimeError("Falta la variable de entorno DJANGO_SECRET_KEY")
+    SECRET_KEY = "django-insecure-gkr3_jux!5p6p%nf5acx40nlp(ra1%xd*xj5!5kxn6qlax_=#y"  # solo desarrollo
 
-# En PythonAnywhere: producción
-DEBUG = False
+DEBUG = os.environ.get("DJANGO_DEBUG") == "1"
 
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
-    "mflores.pythonanywhere.com",
-    ".pythonanywhere.com",  # opcional, por si acaso subdominios [web:50][web:51][web:54]
+    ".vercel.app",
+    *filter(None, os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",")),
 ]
+
+if ON_VERCEL:
+    # Vercel termina el HTTPS y reenvía la petición al function
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -45,10 +56,12 @@ MIDDLEWARE = [
 
 # --- CORS / CSRF ---
 
+# En Vercel el frontend y la API comparten dominio, así que Django ya acepta
+# esas peticiones; aquí solo hacen falta orígenes distintos del propio host.
 CSRF_TRUSTED_ORIGINS = [
-    "https://mflores.pythonanywhere.com",   # dominio de producción [web:41][web:52][web:55]
     "http://localhost:5173",                # para desarrollo con Vite
     "http://127.0.0.1:5173",
+    *filter(None, os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")),
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -64,8 +77,7 @@ ROOT_URLCONF = "mi_jornada.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": ["/home/mflores/mi_jornada/templates",
-                 ],
+        "DIRS": [BASE_DIR.parent / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -79,11 +91,17 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "mi_jornada.wsgi.application"
 
+# --- Base de datos ---
+# Con DATABASE_URL (p. ej. Postgres de Supabase) se usa esa base;
+# sin ella, SQLite local para desarrollo.
+
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        conn_max_age=600,
+        conn_health_checks=True,
+        ssl_require=bool(os.environ.get("DATABASE_URL")),
+    )
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -98,10 +116,13 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-# --- Static files (requerido en PythonAnywhere) ---
+# --- Static files ---
+# El build de Vite escribe en backend/static; Vercel ejecuta collectstatic
+# automáticamente (porque STATIC_ROOT está definido) y los sirve desde su CDN.
 
 STATIC_URL = "/static/"
-STATIC_ROOT = os.path.join(BASE_DIR, "static_root")  # carpeta para collectstatic [web:40][web:46][web:47]
+STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "static_root"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

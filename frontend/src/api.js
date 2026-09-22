@@ -9,8 +9,8 @@ function getCookie(name) {
 }
 
 const api = axios.create({
-  baseURL: "https://mflores.pythonanywhere.com/api/",
-  //baseURL: "http://192.168.1.119:8000/api/",
+  // Mismo dominio que Django; en desarrollo Vite redirige /api a runserver
+  baseURL: "/api/",
   withCredentials: true,
 });
 
