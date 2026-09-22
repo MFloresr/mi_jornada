@@ -111,7 +111,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = "es"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
@@ -133,5 +133,19 @@ FRONTEND_BASE_URL = os.environ.get(
     "http://localhost:5173",  # por defecto, entorno de desarrollo
 )
 
-DEFAULT_FROM_EMAIL = "no-reply@mi-jornada.local"
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+# Con EMAIL_HOST_USER y EMAIL_HOST_PASSWORD se envía por SMTP (por defecto
+# Gmail, con una contraseña de aplicación); sin ellas, los correos se
+# muestran en la consola.
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+
+if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+    EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+    EMAIL_USE_TLS = True
+    EMAIL_TIMEOUT = 10
+    DEFAULT_FROM_EMAIL = f"Mi Jornada <{EMAIL_HOST_USER}>"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    DEFAULT_FROM_EMAIL = "no-reply@mi-jornada.local"

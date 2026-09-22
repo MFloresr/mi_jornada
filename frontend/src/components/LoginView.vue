@@ -15,8 +15,73 @@
         </div>
       </div>
 
+      <!-- Card de recuperación de contraseña -->
+      <div
+        v-if="modoRecuperar"
+        class="card bg-base-100 shadow-xl border border-base-300"
+      >
+        <div class="card-body">
+          <h1 class="card-title justify-center text-lg">
+            Recuperar contraseña
+          </h1>
+
+          <div v-if="recuperarEnviado" class="mt-2 space-y-4">
+            <div class="alert alert-success text-sm">
+              Si el email está registrado, recibirás un enlace para cambiar la
+              contraseña. Caduca en 1 hora.
+            </div>
+            <button class="btn btn-outline w-full" @click="volverALogin">
+              Volver al inicio de sesión
+            </button>
+          </div>
+
+          <form v-else class="mt-2 space-y-3" @submit.prevent="onRecuperar">
+            <p class="text-sm text-base-content/70 text-center">
+              Introduce tu email y te enviaremos un enlace para elegir una
+              contraseña nueva.
+            </p>
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text">Email</span>
+              </label>
+              <input
+                type="email"
+                v-model.trim="email"
+                placeholder="nombre@empresa.com"
+                autocomplete="email"
+                required
+                class="input input-bordered w-full"
+              />
+            </div>
+
+            <p v-if="error" class="text-xs text-error mt-1">
+              {{ error }}
+            </p>
+
+            <button
+              type="submit"
+              class="btn btn-primary w-full"
+              :disabled="loading"
+            >
+              <span v-if="!loading">Enviar enlace</span>
+              <span v-else class="flex items-center gap-2">
+                <span class="loading loading-spinner loading-xs" />
+                Enviando...
+              </span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm w-full"
+              @click="volverALogin"
+            >
+              Volver al inicio de sesión
+            </button>
+          </form>
+        </div>
+      </div>
+
       <!-- Card de login -->
-      <div class="card bg-base-100 shadow-xl border border-base-300">
+      <div v-else class="card bg-base-100 shadow-xl border border-base-300">
         <div class="card-body">
           <h1 class="card-title justify-center text-lg">Inicia sesión</h1>
           <p class="text-sm text-base-content/70 text-center">
@@ -77,7 +142,11 @@
                 />
                 <span class="label-text">Recordar sesión</span>
               </label>
-              <button type="button" class="link link-hover text-xs">
+              <button
+                type="button"
+                class="link link-hover text-xs"
+                @click="abrirRecuperar"
+              >
                 ¿Olvidaste la contraseña?
               </button>
             </div>
@@ -158,6 +227,35 @@ const onSubmit = async () => {
     error.value =
       err?.response?.data?.detail ||
       "Credenciales inválidas o error al iniciar sesión.";
+  } finally {
+    loading.value = false;
+  }
+};
+
+/* ---------- Recuperar contraseña ---------- */
+const modoRecuperar = ref(false);
+const recuperarEnviado = ref(false);
+
+const abrirRecuperar = () => {
+  modoRecuperar.value = true;
+  recuperarEnviado.value = false;
+  error.value = null;
+};
+
+const volverALogin = () => {
+  modoRecuperar.value = false;
+  error.value = null;
+};
+
+const onRecuperar = async () => {
+  loading.value = true;
+  error.value = null;
+
+  try {
+    await api.post("password-reset/", { email: email.value });
+    recuperarEnviado.value = true;
+  } catch (err) {
+    error.value = "No se pudo enviar la solicitud. Inténtalo de nuevo.";
   } finally {
     loading.value = false;
   }

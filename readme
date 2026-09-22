@@ -39,7 +39,6 @@ Vue, e incluye autenticación, dashboard, calendario y una API REST.
 - Validaciones avanzadas de horarios.
 - Exportación de registros a CSV.
 - Estadísticas avanzadas.
-- Configuración definitiva del correo de recuperación.
 - Pruebas automatizadas.
 - Mejoras adicionales de seguridad y despliegue.
 
@@ -266,6 +265,8 @@ Variables de entorno necesarias en Vercel:
 | `DATABASE_URL` | Cadena de conexión de PostgreSQL (Supabase). |
 | `FRONTEND_BASE_URL` | URL pública, usada en los enlaces de recuperación de contraseña. |
 | `DJANGO_ALLOWED_HOSTS` | Opcional: dominios propios separados por comas. |
+| `EMAIL_HOST_USER` | Cuenta de Gmail que envía los correos de recuperación. |
+| `EMAIL_HOST_PASSWORD` | Contraseña de aplicación de esa cuenta de Gmail. |
 
 Las migraciones no se ejecutan en el despliegue: lánzalas desde local con
 `DATABASE_URL` apuntando a la base de producción.
