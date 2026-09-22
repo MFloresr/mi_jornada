@@ -50,7 +50,7 @@ Vue, e incluye autenticación, dashboard, calendario y una API REST.
 - Python
 - Django
 - Django REST Framework
-- SQLite durante el desarrollo
+- SQLite en desarrollo, PostgreSQL (Supabase) en producción
 
 ### Frontend
 
@@ -63,8 +63,8 @@ Vue, e incluye autenticación, dashboard, calendario y una API REST.
 
 ### Despliegue
 
-- PythonAnywhere
-- `collectstatic` para archivos estáticos
+- Vercel (Django como Vercel Function)
+- PostgreSQL en Supabase
 
 ## Arquitectura
 
@@ -245,20 +245,30 @@ frontend/src/api.js
 
 ## Despliegue
 
-El proyecto está preparado para desplegarse en PythonAnywhere.
+El proyecto se despliega en Vercel desde la rama `main`. Vercel detecta
+Django por `backend/manage.py`, instala `requirements.txt` y ejecuta
+`collectstatic` automáticamente.
 
-Proceso general:
+El frontend compilado se versiona en el repositorio. Tras cambiar el frontend:
 
 ```bash
 cd frontend
 npm run build
-
-cd ../backend
-python manage.py collectstatic
 ```
 
-La configuración definitiva del despliegue puede variar según la estructura
-del servidor y las rutas configuradas en PythonAnywhere.
+Esto genera `backend/static/` y `templates/index.html`.
+
+Variables de entorno necesarias en Vercel:
+
+| Variable | Descripción |
+|---|---|
+| `DJANGO_SECRET_KEY` | Clave secreta de Django (obligatoria en Vercel). |
+| `DATABASE_URL` | Cadena de conexión de PostgreSQL (Supabase). |
+| `FRONTEND_BASE_URL` | URL pública, usada en los enlaces de recuperación de contraseña. |
+| `DJANGO_ALLOWED_HOSTS` | Opcional: dominios propios separados por comas. |
+
+Las migraciones no se ejecutan en el despliegue: lánzalas desde local con
+`DATABASE_URL` apuntando a la base de producción.
 
 ## Seguridad
 

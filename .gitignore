@@ -19,3 +19,7 @@ node_modules/
 .vscode/
 .idea/
 *.iml
+
+# Vercel
+.vercel/
+.env*.local
