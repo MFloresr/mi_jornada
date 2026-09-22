@@ -3,6 +3,7 @@ import { ref, onMounted } from "vue";
 import api from "./api";
 
 import LoginView from "./components/LoginView.vue";
+import ResetPasswordView from "./components/ResetPasswordView.vue";
 import RegistroForm from "./components/RegistroForm.vue";
 import RegistrosList from "./components/RegistrosList.vue";
 import Calendario from "./components/Calendario.vue";
@@ -13,6 +14,11 @@ import QuickStats from "./components/QuickStats.vue";
 
 /* ---------- Estado global ---------- */
 const dark = ref(false);
+
+// Enlace del email de recuperación: /reset-password/<token>/
+const resetToken =
+  window.location.pathname.match(/^\/reset-password\/([^/]+)\/?$/)?.[1] ??
+  null;
 
 const registros = ref([]);
 const userInfo = ref(null);
@@ -196,9 +202,12 @@ onMounted(async () => {
 </script>
 
 <template>
+  <!-- NUEVA CONTRASEÑA (enlace del email) -->
+  <ResetPasswordView v-if="resetToken" :token="resetToken" />
+
   <!-- LOGIN -->
   <div
-    v-if="!userInfo"
+    v-else-if="!userInfo"
     class="min-h-screen flex items-center justify-center bg-base-200 px-4"
   >
     <LoginView @logged-in="onLoggedIn" />

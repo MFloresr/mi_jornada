@@ -1,8 +1,11 @@
 import json
+import logging
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.db.models import Count, Sum
 from django.http import HttpResponseBadRequest, JsonResponse
@@ -16,6 +19,8 @@ from rest_framework.response import Response
 
 from .models import PasswordResetToken, Registro
 from .serializers import RegistroSerializer
+
+logger = logging.getLogger(__name__)
 
 
 # ---------- Sugerencias de lugares ----------
@@ -118,9 +123,8 @@ def password_reset_request_view(request):
     if not email:
         return HttpResponseBadRequest("Falta email")
 
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
+    user = User.objects.filter(email__iexact=email, is_active=True).first()
+    if user is None:
         # No revelamos si existe o no
         return JsonResponse(
             {"detail": "Si el email existe, se enviará un enlace"}, status=200
@@ -129,15 +133,24 @@ def password_reset_request_view(request):
     token = get_random_string(48)
     PasswordResetToken.objects.create(user=user, token=token)
 
-    reset_url = f"{settings.FRONTEND_BASE_URL}/reset-password/{token}"
+    reset_url = f"{settings.FRONTEND_BASE_URL}/reset-password/{token}/"
 
-    send_mail(
-        subject="Recuperar contraseña",
-        message=f"Para cambiar tu contraseña, entra en: {reset_url}",
-        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-        recipient_list=[email],
-        fail_silently=True,
-    )
+    try:
+        send_mail(
+            subject="Recuperar contraseña - Mi Jornada",
+            message=(
+                f"Hola {user.get_username()},\n\n"
+                "Hemos recibido una solicitud para cambiar tu contraseña.\n"
+                f"Para elegir una nueva, entra en este enlace:\n\n{reset_url}\n\n"
+                "El enlace caduca en 1 hora. Si no lo has pedido tú, "
+                "ignora este correo.\n"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+        )
+    except Exception:
+        # La respuesta es la misma para no revelar nada; el error queda en los logs
+        logger.exception("No se pudo enviar el email de recuperación")
 
     return JsonResponse(
         {"detail": "Si el email existe, se enviará un enlace"}, status=200
@@ -168,6 +181,11 @@ def password_reset_confirm_view(request, token):
         return JsonResponse({"detail": "Token caducado"}, status=400)
 
     user = prt.user
+    try:
+        validate_password(new_password, user)
+    except ValidationError as e:
+        return JsonResponse({"detail": " ".join(e.messages)}, status=400)
+
     user.set_password(new_password)
     user.save()
 
