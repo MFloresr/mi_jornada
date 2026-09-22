@@ -202,6 +202,18 @@ Aplicar las migraciones:
 python manage.py migrate
 ```
 
+### Base de datos
+
+Sin configuración adicional se usa SQLite (`backend/db.sqlite3`).
+
+Para usar PostgreSQL (por ejemplo Supabase), define la variable de entorno
+`DATABASE_URL` antes de ejecutar `migrate` o arrancar Django. En Supabase,
+cópiala de *Project Settings → Database → Connection string* (Session pooler):
+
+```powershell
+$env:DATABASE_URL = "postgresql://postgres.<ref>:<password>@<host>:5432/postgres"
+```
+
 Iniciar Django:
 
 ```bash
