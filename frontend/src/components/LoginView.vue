@@ -159,6 +159,15 @@
               </button>
             </div>
           </form>
+
+          <!-- Cuenta de demostración -->
+          <div class="divider my-1 text-xs text-base-content/50">o</div>
+          <button type="button" class="btn btn-outline w-full" :disabled="loading" @click="entrarDemo">
+            Probar la demo
+          </button>
+          <p class="text-center text-xs text-base-content/60">
+            Cuenta de ejemplo con datos ficticios. Lo que cambies se borra solo.
+          </p>
         </div>
       </div>
 
@@ -171,7 +180,7 @@
 
 <script setup>
 import Logo from "./Logo.vue";
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import api from "../api";
 
 const emit = defineEmits(["logged-in"]);
@@ -190,6 +199,25 @@ const validate = () => {
   passwordError.value = !password.value || password.value.length < 6;
   return !emailError.value && !passwordError.value;
 };
+
+// Cuenta de demostración pública (los datos se regeneran en el servidor)
+const DEMO = { email: "demo@example.com", password: "demo-mi-jornada" };
+
+const entrarDemo = () => {
+  email.value = DEMO.email;
+  password.value = DEMO.password;
+  onSubmit();
+};
+
+// /?demo=1 entra directamente con la cuenta demo (enlace del portfolio)
+onMounted(() => {
+  const url = new URL(window.location.href);
+  if (url.searchParams.has("demo")) {
+    url.searchParams.delete("demo");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    entrarDemo();
+  }
+});
 
 const onSubmit = async () => {
   if (!validate()) return;

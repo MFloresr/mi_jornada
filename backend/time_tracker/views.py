@@ -22,6 +22,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from . import ia
+from .demo import debe_reiniciarse, es_demo, preparar_demo
 from .models import JornadaActiva, PasswordResetToken, Registro, UsoIA
 from .serializers import JornadaActivaSerializer, RegistroSerializer
 
@@ -77,6 +78,10 @@ def login_view(request):
 
     UserModel = get_user_model()
 
+    # La cuenta demo se crea la primera vez que alguien entra con ella
+    if email.lower() == settings.DEMO_EMAIL.lower() and not UserModel.objects.filter(email__iexact=email).exists():
+        preparar_demo()
+
     try:
         user = UserModel.objects.get(email=email)
     except UserModel.DoesNotExist:
@@ -85,6 +90,10 @@ def login_view(request):
     user = authenticate(request, username=user.username, password=password)
     if user is None:
         return JsonResponse({"detail": "Credenciales inválidas"}, status=400)
+
+    # Cuenta demo: si nadie la ha usado en la última hora, datos limpios
+    if es_demo(user) and debe_reiniciarse(user):
+        preparar_demo()
 
     login(request, user)
 
@@ -129,7 +138,7 @@ def password_reset_request_view(request):
         return HttpResponseBadRequest("Falta email")
 
     user = User.objects.filter(email__iexact=email, is_active=True).first()
-    if user is None:
+    if user is None or es_demo(user):
         # No revelamos si existe o no
         return JsonResponse(
             {"detail": "Si el email existe, se enviará un enlace"}, status=200
@@ -337,7 +346,8 @@ def ia_interpretar_view(request):
 
     hoy, _ = _ahora()
     uso, _ = UsoIA.objects.get_or_create(usuario=request.user, dia=hoy)
-    if uso.peticiones >= settings.IA_LIMITE_DIARIO:
+    limite = settings.IA_LIMITE_DEMO if es_demo(request.user) else settings.IA_LIMITE_DIARIO
+    if uso.peticiones >= limite:
         return Response(
             {"detail": "Has llegado al límite de usos del asistente por hoy. Rellénalo a mano."},
             status=429,
