@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, time
 from unittest import mock
 from zoneinfo import ZoneInfo
@@ -6,7 +7,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import JornadaActiva, Registro
+from .models import JornadaActiva, Registro, UsoIA
 
 MADRID = ZoneInfo("Europe/Madrid")
 
@@ -86,3 +87,90 @@ class RegistroValidacionTests(BaseAPITest):
 
     def test_comida_en_jornada_corta(self):
         self.assertEqual(self.crear(hora_salida="08:45", descanso_comida=True).status_code, 400)
+
+
+class IATests(BaseAPITest):
+    def respuesta_falsa(self, datos, stop_reason="end_turn"):
+        bloque = mock.Mock(type="text", text=json.dumps(datos))
+        return mock.Mock(stop_reason=stop_reason, content=[bloque], _request_id="req_test")
+
+    def llamar(self, texto, datos=None, **kw):
+        # Proveedor Claude: GEMINI_API_KEY vacía para que no tenga prioridad
+        with mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test", "GEMINI_API_KEY": ""}), \
+             mock.patch("time_tracker.ia.anthropic.Anthropic") as cliente, \
+             mock.patch("django.utils.timezone.now", return_value=a_las(2026, 9, 23, 18, 0)):
+            if datos is not None:
+                cliente.return_value.beta.messages.create.return_value = self.respuesta_falsa(datos, **kw)
+            r = self.client.post("/api/ia/interpretar/", {"texto": texto}, format="json")
+            return r, cliente
+
+    def test_sin_clave_no_disponible(self):
+        self.client.force_login(self.user)
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertFalse(self.client.get("/api/me/").json()["ia_disponible"])
+            self.assertEqual(self.client.post("/api/ia/interpretar/", {"texto": "x"}, format="json").status_code, 503)
+
+    def test_interpreta_y_valida(self):
+        Registro.objects.create(usuario=self.user, fecha=date(2026, 9, 1), hora_entrada=time(8), hora_salida=time(9), lugar="Obra Sants")
+        datos = {
+            "registros": [
+                {"fecha": "2026-09-22", "hora_entrada": "16:00", "hora_salida": "19:00", "lugar": "Obra Sants", "descanso_comida": False, "descripcion": ""},
+                {"fecha": "2026-09-22", "hora_entrada": "08:00", "hora_salida": "14:00", "lugar": "Obra Sants", "descanso_comida": False, "descripcion": ""},
+                {"fecha": "2026-09-22", "hora_entrada": "20:00", "hora_salida": "19:00", "lugar": "", "descanso_comida": False, "descripcion": ""},
+            ],
+            "aviso": "",
+        }
+        r, cliente = self.llamar("ayer de 8 a 14 y de 16 a 19 en la obra de Sants", datos)
+        self.assertEqual(r.status_code, 200)
+        cuerpo = r.json()
+        self.assertEqual([x["hora_entrada"] for x in cuerpo["registros"]], ["08:00", "16:00"])
+        self.assertIn("quitado", cuerpo["aviso"])
+        # El contexto incluye la fecha de hoy y los lugares habituales
+        mensaje = cliente.return_value.beta.messages.create.call_args.kwargs["messages"][0]["content"]
+        self.assertIn("2026-09-23", mensaje)
+        self.assertIn("Obra Sants", mensaje)
+        self.assertEqual(Registro.objects.count(), 1)  # no guarda nada
+
+    def test_rechazo_del_modelo(self):
+        r, _ = self.llamar("algo", {"registros": [], "aviso": ""}, stop_reason="refusal")
+        self.assertEqual(r.status_code, 502)
+
+    def test_limite_diario(self):
+        UsoIA.objects.create(usuario=self.user, dia=date(2026, 9, 23), peticiones=40)
+        r, cliente = self.llamar("hoy de 8 a 17", {"registros": [], "aviso": ""})
+        self.assertEqual(r.status_code, 429)
+        cliente.return_value.beta.messages.create.assert_not_called()
+
+
+class IAGeminiTests(BaseAPITest):
+    def test_gemini_tiene_prioridad_y_se_interpreta(self):
+        datos = {
+            "registros": [
+                {"fecha": "2026-09-23", "hora_entrada": "08:00", "hora_salida": "17:00", "lugar": "Obra Sants", "descanso_comida": True, "descripcion": ""}
+            ],
+            "aviso": "",
+        }
+        entorno = {"GEMINI_API_KEY": "g-test", "ANTHROPIC_API_KEY": "sk-test"}
+        with mock.patch.dict("os.environ", entorno), mock.patch("time_tracker.ia.genai.Client") as cliente, mock.patch(
+            "time_tracker.ia.anthropic.Anthropic"
+        ) as claude, mock.patch("django.utils.timezone.now", return_value=a_las(2026, 9, 23, 18, 0)):
+            cliente.return_value.models.generate_content.return_value = mock.Mock(text=json.dumps(datos))
+            r = self.client.post("/api/ia/interpretar/", {"texto": "hoy de 8 a 17 con comida"}, format="json")
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["registros"][0]["hora_salida"], "17:00")
+        claude.assert_not_called()
+        llamada = cliente.return_value.models.generate_content.call_args.kwargs
+        self.assertEqual(llamada["model"], "gemini-3.5-flash")
+        self.assertEqual(llamada["config"].response_json_schema["required"], ["registros", "aviso"])
+
+    def test_limite_gratuito_de_gemini(self):
+        from google.genai import errors
+
+        with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "g-test"}), mock.patch("time_tracker.ia.genai.Client") as cliente:
+            cliente.return_value.models.generate_content.side_effect = errors.ClientError(
+                429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}}
+            )
+            r = self.client.post("/api/ia/interpretar/", {"texto": "hoy de 8 a 17"}, format="json")
+        self.assertEqual(r.status_code, 502)
+        self.assertIn("límite", r.json()["detail"])

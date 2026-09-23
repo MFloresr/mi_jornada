@@ -73,6 +73,32 @@ export async function guardarRegistro(datos, id = null) {
   await Promise.all([cargarRegistros(), cargarLugares()]);
 }
 
+/**
+ * Guarda varios registros nuevos en orden y se detiene en el primer error.
+ * Devuelve { guardados, error } para saber cuáles quedan pendientes.
+ */
+export async function guardarVarios(lista) {
+  let guardados = 0;
+  let error = null;
+  for (const datos of lista) {
+    try {
+      await api.post("registros/", datos);
+      guardados++;
+    } catch (err) {
+      error = err;
+      break;
+    }
+  }
+  if (guardados) await Promise.all([cargarRegistros(), cargarLugares()]);
+  return { guardados, error };
+}
+
+/** Pide al asistente que convierta un texto en registros (no guarda nada) */
+export async function interpretarTexto(texto) {
+  const r = await api.post("ia/interpretar/", { texto });
+  return r.data;
+}
+
 export async function eliminarRegistro(id) {
   await api.delete(`registros/${id}/`);
   await cargarRegistros();

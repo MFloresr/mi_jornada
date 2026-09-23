@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import JornadaActiva, Profile, Registro
+from .models import JornadaActiva, Profile, Registro, UsoIA
 
 
 @admin.register(Profile)
@@ -26,3 +26,9 @@ class RegistroAdmin(admin.ModelAdmin):
 @admin.register(JornadaActiva)
 class JornadaActivaAdmin(admin.ModelAdmin):
     list_display = ("usuario", "fecha", "hora_entrada", "lugar", "descanso_comida")
+
+
+@admin.register(UsoIA)
+class UsoIAAdmin(admin.ModelAdmin):
+    list_display = ("usuario", "dia", "peticiones")
+    list_filter = ("dia",)

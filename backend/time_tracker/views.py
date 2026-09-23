@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
-from django.db.models import Count, Sum
+from django.db.models import Count, F, Sum
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.utils.crypto import get_random_string
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -20,7 +20,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import JornadaActiva, PasswordResetToken, Registro
+from . import ia
+from .models import JornadaActiva, PasswordResetToken, Registro, UsoIA
 from .serializers import JornadaActivaSerializer, RegistroSerializer
 
 logger = logging.getLogger(__name__)
@@ -216,6 +217,7 @@ def me_view(request):
             "nombre": user.first_name or user.username,
             "es_admin": user.is_superuser or user.is_staff,
             "sueldo_por_hora": float(profile.sueldo_por_hora) if profile else 10.0,
+            "ia_disponible": ia.disponible(),
         }
     )
 
@@ -313,6 +315,47 @@ def jornada_terminar_view(request):
     )
     jornada.delete()
     return Response(RegistroSerializer(registro).data, status=status.HTTP_201_CREATED)
+
+
+# ---------- Asistente de IA ----------
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def ia_interpretar_view(request):
+    """
+    Convierte un texto ("ayer de 8 a 14 en la obra") en registros para que el
+    usuario los revise. No guarda nada.
+    """
+    if not ia.disponible():
+        return Response({"detail": "El asistente no está activado"}, status=503)
+
+    texto = str(request.data.get("texto") or "").strip()
+    if not texto:
+        return Response({"detail": "Escribe cómo ha sido tu jornada"}, status=400)
+    if len(texto) > 600:
+        return Response({"detail": "El texto es demasiado largo (máximo 600 caracteres)"}, status=400)
+
+    hoy, _ = _ahora()
+    uso, _ = UsoIA.objects.get_or_create(usuario=request.user, dia=hoy)
+    if uso.peticiones >= settings.IA_LIMITE_DIARIO:
+        return Response(
+            {"detail": "Has llegado al límite de usos del asistente por hoy. Rellénalo a mano."},
+            status=429,
+        )
+    UsoIA.objects.filter(pk=uso.pk).update(peticiones=F("peticiones") + 1)
+
+    lugares = list(
+        Registro.objects.filter(usuario=request.user)
+        .exclude(lugar="")
+        .values_list("lugar", flat=True)
+        .annotate(num=Count("id"))
+        .order_by("-num")[:10]
+    )
+
+    try:
+        resultado = ia.interpretar(texto, hoy, lugares)
+    except ia.IAError as e:
+        return Response({"detail": str(e)}, status=502)
+    return Response(resultado)
 
 
 # ---------- CSRF ping ----------

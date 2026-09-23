@@ -1,6 +1,7 @@
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import GraficoBarras from "../components/GraficoBarras.vue";
+import Icono from "../components/Icono.vue";
 import TarjetaFichar from "../components/TarjetaFichar.vue";
 import { estado } from "../store";
 import { deLaSemana, delMes, diasRecientes, totales, ultimosDias } from "../metricas";
@@ -13,6 +14,13 @@ const semana = computed(() => totales(deLaSemana(estado.registros)));
 const mes = computed(() => totales(delMes(estado.registros, hoy.getFullYear(), hoy.getMonth())));
 const recientes = computed(() => diasRecientes(estado.registros, 5));
 const barras = computed(() => ultimosDias(estado.registros, 14));
+
+const textoIA = ref("");
+function enviarIA() {
+  if (!textoIA.value.trim()) return;
+  emit("nuevo", { textoIA: textoIA.value.trim() });
+  textoIA.value = "";
+}
 
 const ultimoRegistro = computed(() => estado.registros[0] || null);
 
@@ -39,6 +47,25 @@ const lugares = (d) => [...new Set(d.registros.map((r) => r.lugar))].join(", ");
       <span class="text-sm text-base-content/70">{{ fechaLarga(hoy) }}</span>
       <h1 class="font-display text-3xl font-bold tracking-tight md:text-4xl">Hola, {{ estado.usuario?.nombre }}</h1>
     </header>
+
+    <form
+      v-if="estado.usuario?.ia_disponible"
+      aria-label="Escribir la jornada con IA"
+      class="hidden h-15 items-center gap-3 rounded-2xl border-[1.5px] border-primary bg-base-100 pr-2 pl-4.5 md:flex"
+      @submit.prevent="enviarIA"
+    >
+      <Icono nombre="chispa" :tam="20" class="text-primary" />
+      <label for="ia-barra" class="sr-only">Describe tu jornada</label>
+      <input
+        id="ia-barra"
+        v-model="textoIA"
+        type="text"
+        maxlength="600"
+        placeholder="Escribe tu jornada: «hoy de 8 a 17 en Obra Sants con comida»"
+        class="h-11 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-base-content/50"
+      />
+      <button type="submit" class="btn btn-primary h-11 rounded-xl px-5" :disabled="!textoIA.trim()">Rellenar por mí</button>
+    </form>
 
     <div class="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
       <div class="col-span-2">
