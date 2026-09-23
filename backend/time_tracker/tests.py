@@ -95,7 +95,8 @@ class IATests(BaseAPITest):
         return mock.Mock(stop_reason=stop_reason, content=[bloque], _request_id="req_test")
 
     def llamar(self, texto, datos=None, **kw):
-        with mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}), \
+        # Proveedor Claude: GEMINI_API_KEY vacía para que no tenga prioridad
+        with mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test", "GEMINI_API_KEY": ""}), \
              mock.patch("time_tracker.ia.anthropic.Anthropic") as cliente, \
              mock.patch("django.utils.timezone.now", return_value=a_las(2026, 9, 23, 18, 0)):
             if datos is not None:
@@ -139,3 +140,37 @@ class IATests(BaseAPITest):
         r, cliente = self.llamar("hoy de 8 a 17", {"registros": [], "aviso": ""})
         self.assertEqual(r.status_code, 429)
         cliente.return_value.beta.messages.create.assert_not_called()
+
+
+class IAGeminiTests(BaseAPITest):
+    def test_gemini_tiene_prioridad_y_se_interpreta(self):
+        datos = {
+            "registros": [
+                {"fecha": "2026-09-23", "hora_entrada": "08:00", "hora_salida": "17:00", "lugar": "Obra Sants", "descanso_comida": True, "descripcion": ""}
+            ],
+            "aviso": "",
+        }
+        entorno = {"GEMINI_API_KEY": "g-test", "ANTHROPIC_API_KEY": "sk-test"}
+        with mock.patch.dict("os.environ", entorno), mock.patch("time_tracker.ia.genai.Client") as cliente, mock.patch(
+            "time_tracker.ia.anthropic.Anthropic"
+        ) as claude, mock.patch("django.utils.timezone.now", return_value=a_las(2026, 9, 23, 18, 0)):
+            cliente.return_value.models.generate_content.return_value = mock.Mock(text=json.dumps(datos))
+            r = self.client.post("/api/ia/interpretar/", {"texto": "hoy de 8 a 17 con comida"}, format="json")
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["registros"][0]["hora_salida"], "17:00")
+        claude.assert_not_called()
+        llamada = cliente.return_value.models.generate_content.call_args.kwargs
+        self.assertEqual(llamada["model"], "gemini-3.5-flash")
+        self.assertEqual(llamada["config"].response_json_schema["required"], ["registros", "aviso"])
+
+    def test_limite_gratuito_de_gemini(self):
+        from google.genai import errors
+
+        with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "g-test"}), mock.patch("time_tracker.ia.genai.Client") as cliente:
+            cliente.return_value.models.generate_content.side_effect = errors.ClientError(
+                429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}}
+            )
+            r = self.client.post("/api/ia/interpretar/", {"texto": "hoy de 8 a 17"}, format="json")
+        self.assertEqual(r.status_code, 502)
+        self.assertIn("límite", r.json()["detail"])

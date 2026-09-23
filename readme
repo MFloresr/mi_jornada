@@ -43,13 +43,18 @@ Vue, e incluye autenticación, dashboard, calendario y una API REST.
 
 - Registro de jornadas escribiendo o dictando en lenguaje natural:
   «ayer de 8 a 14 y de 16 a 19 en la obra de Sants».
-- Claude (API de Anthropic) convierte el texto en uno o varios registros
-  (resuelve fechas relativas, separa tramos y reconoce los lugares habituales).
+- Un modelo de IA convierte el texto en uno o varios registros (resuelve
+  fechas relativas, separa tramos y reconoce los lugares habituales).
+  Por defecto Gemini de Google, con plan gratuito; opcionalmente Claude
+  (Anthropic), de pago.
 - Nada se guarda hasta que el usuario lo revisa y confirma; puede cambiar
   cada tramo o corregirlo a mano.
 - Dictado por voz con el reconocimiento del navegador (o el micrófono del teclado).
 - Límite de usos diarios por usuario para controlar el gasto.
-- Solo se activa si está definida la variable `ANTHROPIC_API_KEY`.
+- Solo se activa si está definida `GEMINI_API_KEY` o `ANTHROPIC_API_KEY`
+  (si están las dos, se usa Gemini).
+- En el plan gratuito de Gemini, Google puede usar los textos enviados para
+  mejorar sus productos: no escribas datos personales sensibles en la caja.
 
 ### En desarrollo
 
@@ -75,7 +80,8 @@ Vue, e incluye autenticación, dashboard, calendario y una API REST.
 
 ### IA
 
-- API de Claude (SDK oficial `anthropic` para Python) con salidas estructuradas
+- API de Gemini (SDK `google-genai`) con salida JSON según un esquema
+- Alternativa: API de Claude (SDK `anthropic`) con salidas estructuradas
 
 ### Despliegue
 
@@ -322,8 +328,9 @@ Variables de entorno necesarias en Vercel:
 | `DJANGO_ALLOWED_HOSTS` | Opcional: dominios propios separados por comas. |
 | `EMAIL_HOST_USER` | Cuenta de Gmail que envía los correos de recuperación. |
 | `EMAIL_HOST_PASSWORD` | Contraseña de aplicación de esa cuenta de Gmail. |
-| `ANTHROPIC_API_KEY` | Clave de la API de Anthropic. Sin ella el asistente de IA no aparece. |
-| `IA_MODELO` | Opcional: modelo de Claude (por defecto `claude-opus-5`). |
+| `GEMINI_API_KEY` | Clave gratuita de Google AI Studio para el asistente de IA. Sin ninguna clave de IA, el asistente no aparece. |
+| `ANTHROPIC_API_KEY` | Opcional: clave de pago de Anthropic, si se prefiere Claude (solo se usa si no hay `GEMINI_API_KEY`). |
+| `IA_MODELO` | Opcional: modelo concreto (por defecto `gemini-3.5-flash` o `claude-opus-5`). |
 | `IA_LIMITE_DIARIO` | Opcional: usos del asistente por usuario y día (por defecto 40). |
 
 Las migraciones no se ejecutan en el despliegue: lánzalas desde local con

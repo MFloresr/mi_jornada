@@ -150,6 +150,7 @@ else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
     DEFAULT_FROM_EMAIL = "no-reply@mi-jornada.local"
 # Asistente de IA (registro de jornadas en lenguaje natural)
-# Se activa al definir ANTHROPIC_API_KEY en las variables de entorno.
-IA_MODELO = os.environ.get("IA_MODELO", "claude-opus-5")
+# Se activa al definir GEMINI_API_KEY (gratuita) o ANTHROPIC_API_KEY.
+# IA_MODELO vacío = modelo por defecto del proveedor (ver time_tracker/ia.py).
+IA_MODELO = os.environ.get("IA_MODELO", "")
 IA_LIMITE_DIARIO = int(os.environ.get("IA_LIMITE_DIARIO", "40"))

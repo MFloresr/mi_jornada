@@ -1,7 +1,11 @@
 """
-Interpreta con Claude una jornada escrita o dictada en lenguaje natural
+Interpreta con IA una jornada escrita o dictada en lenguaje natural
 ("ayer de 8 a 14 y de 16 a 19 en la obra de Sants") y la convierte en
 registros. No guarda nada: el usuario confirma antes de guardar.
+
+Proveedores (se usa el primero que tenga clave):
+- Gemini (Google), con plan gratuito: GEMINI_API_KEY.
+- Claude (Anthropic), de pago: ANTHROPIC_API_KEY.
 """
 
 import json
@@ -11,6 +15,9 @@ from datetime import date, datetime, timedelta
 
 import anthropic
 from django.conf import settings
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types as genai_types
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +76,24 @@ class IAError(Exception):
     """Error que se puede mostrar al usuario tal cual."""
 
 
+def proveedor():
+    """'gemini', 'claude' o None si no hay ninguna clave configurada."""
+    if os.environ.get("GEMINI_API_KEY"):
+        return "gemini"
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return "claude"
+    return None
+
+
 def disponible():
-    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return proveedor() is not None
+
+
+def _modelo(nombre_proveedor):
+    return settings.IA_MODELO or {
+        "gemini": "gemini-3.5-flash",
+        "claude": "claude-opus-5",
+    }[nombre_proveedor]
 
 
 def _contexto(hoy, lugares):
@@ -115,15 +138,47 @@ def _validar(registros, hoy):
     return validos, descartados
 
 
-def interpretar(texto, hoy, lugares):
-    """
-    Devuelve {"registros": [...], "aviso": str}.
-    Lanza IAError con un mensaje para el usuario si algo falla.
-    """
+def _pedir_a_gemini(mensaje):
+    """Devuelve el texto JSON generado por Gemini."""
+    modelo = _modelo("gemini")
+    config = genai_types.GenerateContentConfig(
+        system_instruction=INSTRUCCIONES,
+        response_mime_type="application/json",
+        response_json_schema=ESQUEMA,
+        http_options=genai_types.HttpOptions(timeout=45_000),
+    )
+    if modelo.startswith("gemini-3"):
+        config.thinking_config = genai_types.ThinkingConfig(thinking_level="low")
+
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    try:
+        respuesta = client.models.generate_content(model=modelo, contents=mensaje, config=config)
+    except genai_errors.APIError as e:
+        if e.code == 429:
+            raise IAError("El asistente gratuito ha llegado a su límite por ahora. Prueba en un rato o rellénalo a mano.")
+        if e.code in (400, 401, 403, 404):
+            logger.error("Error de configuración de Gemini %s: %s", e.code, e.message)
+            raise IAError("El asistente no está bien configurado. Avisa al administrador.")
+        logger.error("Error de Gemini %s: %s", e.code, e.message)
+        raise IAError("El asistente no responde ahora mismo. Rellénalo a mano o prueba más tarde.")
+    except Exception:
+        logger.exception("Fallo al llamar a Gemini")
+        raise IAError("No se pudo conectar con el asistente. Prueba de nuevo.")
+
+    texto = respuesta.text or ""
+    if not texto:
+        motivo = respuesta.candidates[0].finish_reason if respuesta.candidates else None
+        logger.error("Gemini no devolvió texto (motivo %s)", motivo)
+        raise IAError("El asistente no ha podido procesar ese texto. Rellénalo a mano.")
+    return texto
+
+
+def _pedir_a_claude(mensaje):
+    """Devuelve el texto JSON generado por Claude."""
     client = anthropic.Anthropic(timeout=45.0, max_retries=1)
     try:
         respuesta = client.beta.messages.create(
-            model=settings.IA_MODELO,
+            model=_modelo("claude"),
             max_tokens=4000,
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
@@ -133,12 +188,7 @@ def interpretar(texto, hoy, lugares):
                 "format": {"type": "json_schema", "schema": ESQUEMA},
             },
             system=INSTRUCCIONES,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"{_contexto(hoy, lugares)}\n\n<jornada>\n{texto}\n</jornada>",
-                }
-            ],
+            messages=[{"role": "user", "content": mensaje}],
         )
     except anthropic.AuthenticationError:
         logger.error("Clave de Anthropic no válida")
@@ -157,11 +207,24 @@ def interpretar(texto, hoy, lugares):
     if respuesta.stop_reason == "max_tokens":
         raise IAError("El texto es demasiado largo. Escríbelo en partes más cortas.")
 
-    texto_json = next((b.text for b in respuesta.content if b.type == "text"), "")
+    return next((b.text for b in respuesta.content if b.type == "text"), "")
+
+
+def interpretar(texto, hoy, lugares):
+    """
+    Devuelve {"registros": [...], "aviso": str}.
+    Lanza IAError con un mensaje para el usuario si algo falla.
+    """
+    mensaje = f"{_contexto(hoy, lugares)}\n\n<jornada>\n{texto}\n</jornada>"
+    if proveedor() == "gemini":
+        texto_json = _pedir_a_gemini(mensaje)
+    else:
+        texto_json = _pedir_a_claude(mensaje)
+
     try:
         datos = json.loads(texto_json)
     except json.JSONDecodeError:
-        logger.error("Respuesta no JSON del asistente (request %s)", respuesta._request_id)
+        logger.error("Respuesta no JSON del asistente")
         raise IAError("No he entendido la respuesta del asistente. Prueba de nuevo.")
 
     registros, descartados = _validar(datos.get("registros") or [], hoy)
