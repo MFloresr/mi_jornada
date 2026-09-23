@@ -1,2 +1,131 @@
 @import "tailwindcss";
-@plugin "daisyui";
+@plugin "daisyui" {
+  themes: false;
+}
+
+/* Tema claro: fondo cálido, verde petróleo para el trabajo y ámbar para el dinero */
+@plugin "daisyui/theme" {
+  name: "jornada";
+  default: true;
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #f5f3ee;
+  --color-base-300: #e6e1d6;
+  --color-base-content: #1b1a17;
+  --color-primary: #0e6b63;
+  --color-primary-content: #ffffff;
+  --color-secondary: #e1efec;
+  --color-secondary-content: #0b524c;
+  --color-accent: #f6ebd5;
+  --color-accent-content: #6b4610;
+  --color-neutral: #1b1a17;
+  --color-neutral-content: #f5f3ee;
+  --color-info: #2563eb;
+  --color-info-content: #ffffff;
+  --color-success: #15803d;
+  --color-success-content: #ffffff;
+  --color-warning: #b45309;
+  --color-warning-content: #ffffff;
+  --color-error: #b42318;
+  --color-error-content: #ffffff;
+  --radius-selector: 1rem;
+  --radius-field: 0.875rem;
+  --radius-box: 1.25rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin "daisyui/theme" {
+  name: "jornada-oscuro";
+  prefersdark: true;
+  color-scheme: dark;
+  --color-base-100: #1e1d1a;
+  --color-base-200: #141412;
+  --color-base-300: #2f2d29;
+  --color-base-content: #f2efe8;
+  --color-primary: #0f766d;
+  --color-primary-content: #ffffff;
+  --color-secondary: #16322f;
+  --color-secondary-content: #8fe0d4;
+  --color-accent: #2e2515;
+  --color-accent-content: #f0cf95;
+  --color-neutral: #f2efe8;
+  --color-neutral-content: #141412;
+  --color-info: #60a5fa;
+  --color-info-content: #0b1220;
+  --color-success: #4ade80;
+  --color-success-content: #052e16;
+  --color-warning: #fbbf24;
+  --color-warning-content: #1f1300;
+  --color-error: #f87171;
+  --color-error-content: #2a0707;
+  --radius-selector: 1rem;
+  --radius-field: 0.875rem;
+  --radius-box: 1.25rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* Colores propios que cambian con el tema */
+[data-theme="jornada"] {
+  --dinero: #8a5a12;
+  --enlace: #0e6b63;
+  --vivo: #7ef0c9;
+}
+[data-theme="jornada-oscuro"] {
+  --dinero: #e3b66a;
+  --enlace: #5fd3c3;
+  --vivo: #7ef0c9;
+}
+
+@theme inline {
+  --color-dinero: var(--dinero);
+  --color-enlace: var(--enlace);
+  --color-vivo: var(--vivo);
+}
+
+@theme {
+  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Figtree", ui-sans-serif, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-base-200 text-base-content antialiased;
+  }
+  .cifra {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Paneles deslizantes (hoja inferior en móvil, diálogo centrado en escritorio) */
+.hoja-enter-active,
+.hoja-leave-active {
+  transition: opacity 0.2s ease;
+}
+.hoja-enter-active .hoja-panel,
+.hoja-leave-active .hoja-panel {
+  transition: transform 0.25s ease;
+}
+.hoja-enter-from,
+.hoja-leave-to {
+  opacity: 0;
+}
+.hoja-enter-from .hoja-panel,
+.hoja-leave-to .hoja-panel {
+  transform: translateY(24px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .hoja-enter-active,
+  .hoja-leave-active,
+  .hoja-enter-active .hoja-panel,
+  .hoja-leave-active .hoja-panel {
+    transition: none;
+  }
+}

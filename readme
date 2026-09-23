@@ -12,18 +12,23 @@ Vue, e incluye autenticación, dashboard, calendario y una API REST.
 
 ### Usuario
 
-- Inicio de sesión mediante email y contraseña.
-- Gestión de sesiones.
-- Creación de registros de jornada.
+- Inicio de sesión mediante email y contraseña (la sesión se mantiene al recargar).
+- Fichar: botón para empezar y terminar la jornada con la hora exacta,
+  con pausa de comida y opción de descartarla.
+- Creación de registros de jornada (formulario corto: Hoy/Ayer, lugares
+  sugeridos, repetir el último día, duplicar un día).
 - Registro de fecha, hora de entrada y hora de salida.
 - Descuento opcional de una hora de comida.
 - Descripción y lugar de trabajo.
 - Cálculo automático de la duración trabajada.
 - Cálculo del sueldo generado.
-- Consulta de registros en formato listado.
-- Visualización mediante calendario.
-- Resumen de estadísticas.
+- Validación de horarios (la salida debe ser posterior a la entrada).
+- Listado de registros filtrable por mes y lugar, con exportación a CSV.
+- Calendario mensual con las horas de cada día.
+- Estadísticas del mes: horas, importe, media diaria, horas por día y por lugar.
 - Sugerencias de lugares utilizados anteriormente.
+- Diseño pensado para móvil (navegación inferior) y escritorio (barra lateral).
+- Modo claro y oscuro.
 
 ### Administración
 
@@ -36,10 +41,7 @@ Vue, e incluye autenticación, dashboard, calendario y una API REST.
 
 ### En desarrollo
 
-- Validaciones avanzadas de horarios.
-- Exportación de registros a CSV.
-- Estadísticas avanzadas.
-- Pruebas automatizadas.
+- Registro de jornadas escribiendo o dictando en lenguaje natural (IA).
 - Mejoras adicionales de seguridad y despliegue.
 
 ## Tecnologías
@@ -84,11 +86,15 @@ mi_jornada/
 │   └── static/
 └── frontend/
     ├── src/
-    │   ├── components/
-    │   ├── App.vue
+    │   ├── components/   # piezas reutilizables (fichar, formulario, gráfico...)
+    │   ├── views/        # pantallas: Hoy, Registros, Calendario, Estadísticas, Perfil
+    │   ├── App.vue       # sesión, navegación por #/seccion y tema
     │   ├── api.js
+    │   ├── store.js      # estado compartido y llamadas a la API
+    │   ├── metricas.js   # totales por día, semana, mes y lugar
+    │   ├── utils.js      # formato de horas, euros y fechas
     │   ├── main.js
-    │   └── style.css
+    │   └── style.css     # temas claro/oscuro de DaisyUI
     ├── public/
     ├── dist/
     ├── package.json
@@ -120,6 +126,12 @@ Representa una jornada laboral:
 - Duración trabajada.
 - Sueldo generado.
 
+### JornadaActiva
+
+Jornada fichada que todavía no ha terminado (como máximo una por usuario):
+fecha, hora de entrada, lugar y descanso de comida. Al terminarla se crea el
+`Registro` correspondiente y se borra.
+
 El sueldo por hora se conserva en cada registro para mantener el historial
 aunque el usuario cambie posteriormente su tarifa.
 
@@ -132,6 +144,7 @@ La API está disponible bajo `/api/`.
 ```text
 POST /api/login/
 POST /api/logout/
+GET  /api/me/
 GET  /api/csrf-ping/
 POST /api/password-reset/
 POST /api/password-reset/<token>/
@@ -146,6 +159,16 @@ GET    /api/registros/<id>/
 PUT    /api/registros/<id>/
 PATCH  /api/registros/<id>/
 DELETE /api/registros/<id>/
+```
+
+### Fichar
+
+```text
+GET    /api/jornada/            # jornada en curso o null
+PATCH  /api/jornada/            # cambiar lugar o descanso de comida
+DELETE /api/jornada/            # descartarla
+POST   /api/jornada/iniciar/
+POST   /api/jornada/terminar/   # crea el registro (409 si empezó otro día)
 ```
 
 ### Utilidades
@@ -213,10 +236,16 @@ cópiala de *Project Settings → Database → Connection string* (Session poole
 $env:DATABASE_URL = "postgresql://postgres.<ref>:<password>@<host>:5432/postgres"
 ```
 
-Iniciar Django:
+Iniciar Django (con `DJANGO_DEBUG=1` para que sirva los estáticos en local):
 
 ```bash
 python manage.py runserver
+```
+
+Pruebas del backend:
+
+```bash
+python manage.py test time_tracker
 ```
 
 ### Frontend

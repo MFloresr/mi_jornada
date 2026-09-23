@@ -13,12 +13,15 @@ from django.utils.crypto import get_random_string
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods
 
-from rest_framework import viewsets
+from django.utils import timezone
+
+from rest_framework import status, viewsets
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import PasswordResetToken, Registro
-from .serializers import RegistroSerializer
+from .models import JornadaActiva, PasswordResetToken, Registro
+from .serializers import JornadaActivaSerializer, RegistroSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +195,124 @@ def password_reset_confirm_view(request, token):
     prt.delete()
 
     return JsonResponse({"detail": "Contraseña actualizada correctamente"})
+
+
+# ---------- Sesión actual ----------
+@require_GET
+def me_view(request):
+    """
+    Datos del usuario con sesión iniciada (401 si no hay sesión).
+    Permite a la SPA recuperar la sesión al recargar la página.
+    """
+    user = request.user
+    if not user.is_authenticated:
+        return JsonResponse({"detail": "Sin sesión"}, status=401)
+
+    profile = getattr(user, "profile", None)
+    return JsonResponse(
+        {
+            "username": user.username,
+            "email": user.email,
+            "nombre": user.first_name or user.username,
+            "es_admin": user.is_superuser or user.is_staff,
+            "sueldo_por_hora": float(profile.sueldo_por_hora) if profile else 10.0,
+        }
+    )
+
+
+# ---------- Fichar: jornada en curso ----------
+def _ahora():
+    """Fecha y hora local (TIME_ZONE) sin segundos."""
+    ahora = timezone.localtime()
+    return ahora.date(), ahora.time().replace(second=0, microsecond=0)
+
+
+@api_view(["GET", "PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def jornada_view(request):
+    """
+    GET    -> {"activa": {...} | null}
+    PATCH  -> cambia lugar o descanso_comida de la jornada en curso
+    DELETE -> descarta la jornada en curso sin guardar registro
+    """
+    jornada = JornadaActiva.objects.filter(usuario=request.user).first()
+
+    if request.method == "GET":
+        data = JornadaActivaSerializer(jornada).data if jornada else None
+        return Response({"activa": data})
+
+    if jornada is None:
+        return Response({"detail": "No hay ninguna jornada en curso"}, status=404)
+
+    if request.method == "DELETE":
+        jornada.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    serializer = JornadaActivaSerializer(jornada, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    return Response({"activa": serializer.data})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def jornada_iniciar_view(request):
+    """Empieza una jornada ahora mismo (409 si ya hay una en curso)."""
+    if JornadaActiva.objects.filter(usuario=request.user).exists():
+        return Response({"detail": "Ya tienes una jornada en curso"}, status=409)
+
+    fecha, hora = _ahora()
+    jornada = JornadaActiva.objects.create(
+        usuario=request.user,
+        fecha=fecha,
+        hora_entrada=hora,
+        lugar=(request.data.get("lugar") or "").strip()[:200],
+    )
+    return Response(
+        {"activa": JornadaActivaSerializer(jornada).data},
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def jornada_terminar_view(request):
+    """
+    Termina la jornada en curso: crea el Registro con la hora actual como salida.
+    Si la jornada empezó otro día, responde 409 para que se guarde a mano.
+    """
+    jornada = JornadaActiva.objects.filter(usuario=request.user).first()
+    if jornada is None:
+        return Response({"detail": "No hay ninguna jornada en curso"}, status=404)
+
+    fecha, hora = _ahora()
+    if fecha != jornada.fecha:
+        return Response(
+            {
+                "detail": "La jornada empezó otro día. Revisa las horas y guárdala a mano.",
+                "activa": JornadaActivaSerializer(jornada).data,
+            },
+            status=409,
+        )
+
+    serializer = RegistroSerializer(
+        data={
+            "fecha": jornada.fecha,
+            "hora_entrada": jornada.hora_entrada,
+            "hora_salida": hora,
+            "lugar": jornada.lugar,
+            "descanso_comida": jornada.descanso_comida,
+            "descripcion": "",
+        }
+    )
+    serializer.is_valid(raise_exception=True)
+    profile = getattr(request.user, "profile", None)
+    registro = serializer.save(
+        usuario=request.user,
+        sueldo_por_hora=profile.sueldo_por_hora if profile else 10.00,
+    )
+    jornada.delete()
+    return Response(RegistroSerializer(registro).data, status=status.HTTP_201_CREATED)
 
 
 # ---------- CSRF ping ----------

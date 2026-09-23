@@ -13,7 +13,13 @@ urlpatterns = [
     # Lugares sugeridos
     path("lugares/", views.lugares_sugeridos, name="lugares_sugeridos"),
 
+    # Fichar
+    path("jornada/", views.jornada_view, name="jornada"),
+    path("jornada/iniciar/", views.jornada_iniciar_view, name="jornada_iniciar"),
+    path("jornada/terminar/", views.jornada_terminar_view, name="jornada_terminar"),
+
     # Auth
+    path("me/", views.me_view, name="me"),
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
     path("password-reset/", views.password_reset_request_view, name="password_reset_request"),
