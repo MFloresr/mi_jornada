@@ -138,39 +138,58 @@ def _validar(registros, hoy):
     return validos, descartados
 
 
-def _pedir_a_gemini(mensaje):
-    """Devuelve el texto JSON generado por Gemini."""
-    modelo = _modelo("gemini")
+# Modelos gratuitos de reserva si el principal está saturado o sin cuota
+GEMINI_RESERVA = ["gemini-3.5-flash-lite", "gemini-2.5-flash"]
+# Errores que merecen probar con otro modelo: cuota, saturación o fallo temporal
+GEMINI_REINTENTABLES = {429, 500, 503, 504}
+
+
+def _config_gemini(modelo):
     config = genai_types.GenerateContentConfig(
         system_instruction=INSTRUCCIONES,
         response_mime_type="application/json",
         response_json_schema=ESQUEMA,
-        http_options=genai_types.HttpOptions(timeout=45_000),
+        http_options=genai_types.HttpOptions(timeout=20_000),
     )
     if modelo.startswith("gemini-3"):
         config.thinking_config = genai_types.ThinkingConfig(thinking_level="low")
+    return config
 
+
+def _pedir_a_gemini(mensaje):
+    """Devuelve el texto JSON generado por Gemini, probando modelos de reserva si hace falta."""
+    principal = _modelo("gemini")
+    modelos = [principal] + [m for m in GEMINI_RESERVA if m != principal]
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    try:
-        respuesta = client.models.generate_content(model=modelo, contents=mensaje, config=config)
-    except genai_errors.APIError as e:
-        if e.code == 429:
-            raise IAError("El asistente gratuito ha llegado a su límite por ahora. Prueba en un rato o rellénalo a mano.")
-        if e.code in (400, 401, 403, 404):
-            logger.error("Error de configuración de Gemini %s: %s", e.code, e.message)
-            raise IAError("El asistente no está bien configurado. Avisa al administrador.")
-        logger.error("Error de Gemini %s: %s", e.code, e.message)
-        raise IAError("El asistente no responde ahora mismo. Rellénalo a mano o prueba más tarde.")
-    except Exception:
-        logger.exception("Fallo al llamar a Gemini")
-        raise IAError("No se pudo conectar con el asistente. Prueba de nuevo.")
 
-    texto = respuesta.text or ""
-    if not texto:
+    ultimo_codigo = None
+    for modelo in modelos:
+        try:
+            respuesta = client.models.generate_content(
+                model=modelo, contents=mensaje, config=_config_gemini(modelo)
+            )
+        except genai_errors.APIError as e:
+            ultimo_codigo = e.code
+            if e.code in GEMINI_REINTENTABLES:
+                logger.warning("Gemini %s no disponible (%s), probando otro modelo", modelo, e.code)
+                continue
+            logger.error("Error de configuración de Gemini %s en %s: %s", e.code, modelo, e.message)
+            raise IAError("El asistente no está bien configurado. Avisa al administrador.")
+        except Exception:
+            logger.exception("Fallo al llamar a Gemini (%s)", modelo)
+            ultimo_codigo = None
+            continue
+
+        texto = respuesta.text or ""
+        if texto:
+            return texto
         motivo = respuesta.candidates[0].finish_reason if respuesta.candidates else None
-        logger.error("Gemini no devolvió texto (motivo %s)", motivo)
+        logger.error("Gemini %s no devolvió texto (motivo %s)", modelo, motivo)
         raise IAError("El asistente no ha podido procesar ese texto. Rellénalo a mano.")
-    return texto
+
+    if ultimo_codigo == 429:
+        raise IAError("El asistente gratuito ha llegado a su límite por ahora. Prueba en un rato o rellénalo a mano.")
+    raise IAError("El asistente gratuito está saturado en este momento. Prueba en unos minutos o rellénalo a mano.")
 
 
 def _pedir_a_claude(mensaje):

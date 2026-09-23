@@ -7,6 +7,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
+from django.db import connection
 from django.db.models import Count, F, Sum
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.utils.crypto import get_random_string
@@ -350,6 +351,9 @@ def ia_interpretar_view(request):
         .annotate(num=Count("id"))
         .order_by("-num")[:10]
     )
+
+    # Libera la conexión a la base de datos mientras la IA responde (puede tardar)
+    connection.close()
 
     try:
         resultado = ia.interpretar(texto, hoy, lugares)

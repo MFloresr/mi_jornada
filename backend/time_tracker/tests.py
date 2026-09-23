@@ -174,3 +174,29 @@ class IAGeminiTests(BaseAPITest):
             r = self.client.post("/api/ia/interpretar/", {"texto": "hoy de 8 a 17"}, format="json")
         self.assertEqual(r.status_code, 502)
         self.assertIn("límite", r.json()["detail"])
+
+    def test_gemini_saturado_prueba_otro_modelo(self):
+        from google.genai import errors
+
+        datos = {"registros": [], "aviso": "No dices las horas."}
+        with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "g-test"}), mock.patch("time_tracker.ia.genai.Client") as cliente:
+            cliente.return_value.models.generate_content.side_effect = [
+                errors.ServerError(503, {"error": {"message": "high demand", "status": "UNAVAILABLE"}}),
+                mock.Mock(text=json.dumps(datos)),
+            ]
+            r = self.client.post("/api/ia/interpretar/", {"texto": "en la obra"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        modelos = [c.kwargs["model"] for c in cliente.return_value.models.generate_content.call_args_list]
+        self.assertEqual(modelos, ["gemini-3.5-flash", "gemini-3.5-flash-lite"])
+
+    def test_todos_saturados(self):
+        from google.genai import errors
+
+        with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "g-test"}), mock.patch("time_tracker.ia.genai.Client") as cliente:
+            cliente.return_value.models.generate_content.side_effect = errors.ServerError(
+                503, {"error": {"message": "high demand", "status": "UNAVAILABLE"}}
+            )
+            r = self.client.post("/api/ia/interpretar/", {"texto": "hoy de 8 a 17"}, format="json")
+        self.assertEqual(r.status_code, 502)
+        self.assertIn("saturado", r.json()["detail"])
+        self.assertEqual(cliente.return_value.models.generate_content.call_count, 3)
