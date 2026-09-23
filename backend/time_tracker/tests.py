@@ -200,3 +200,67 @@ class IAGeminiTests(BaseAPITest):
         self.assertEqual(r.status_code, 502)
         self.assertIn("saturado", r.json()["detail"])
         self.assertEqual(cliente.return_value.models.generate_content.call_count, 3)
+
+
+class DemoTests(TestCase):
+    def entrar(self):
+        return self.client.post(
+            "/api/login/",
+            data=json.dumps({"email": "demo@example.com", "password": "demo-mi-jornada"}),
+            content_type="application/json",
+        )
+
+    def setUp(self):
+        from .demo import preparar_demo
+
+        self.demo = preparar_demo()
+
+    def test_crea_datos_ficticios_hasta_ayer(self):
+        from django.utils import timezone
+
+        registros = Registro.objects.filter(usuario=self.demo)
+        self.assertGreater(registros.count(), 15)
+        self.assertLess(max(r.fecha for r in registros), timezone.localdate())
+        self.assertFalse(self.demo.is_staff or self.demo.is_superuser)
+
+    def test_login_reinicia_si_lleva_mas_de_una_hora_sin_uso(self):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        Registro.objects.filter(usuario=self.demo).delete()
+        User.objects.filter(pk=self.demo.pk).update(last_login=timezone.now() - timedelta(hours=2))
+        self.assertEqual(self.entrar().status_code, 200)
+        self.assertGreater(Registro.objects.filter(usuario=self.demo).count(), 15)
+
+    def test_login_no_reinicia_si_se_esta_usando(self):
+        from django.utils import timezone
+
+        Registro.objects.filter(usuario=self.demo).delete()
+        User.objects.filter(pk=self.demo.pk).update(last_login=timezone.now())
+        self.assertEqual(self.entrar().status_code, 200)
+        self.assertEqual(Registro.objects.filter(usuario=self.demo).count(), 0)
+
+    def test_no_se_puede_recuperar_su_contrasena(self):
+        from .models import PasswordResetToken
+
+        r = self.client.post(
+            "/api/password-reset/", data=json.dumps({"email": "demo@example.com"}), content_type="application/json"
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(PasswordResetToken.objects.filter(user=self.demo).exists())
+
+    @mock.patch("time_tracker.ia.disponible", return_value=True)
+    def test_limite_de_ia_propio(self, _):
+        from django.test import override_settings
+        from django.utils import timezone
+
+        UsoIA.objects.create(usuario=self.demo, dia=timezone.localdate(), peticiones=15)
+        self.client.force_login(self.demo)
+        with override_settings(IA_LIMITE_DEMO=15):
+            r = self.client.post("/api/ia/interpretar/", data={"texto": "ayer de 8 a 14"}, content_type="application/json")
+        self.assertEqual(r.status_code, 429)
+
+    def test_se_crea_al_entrar_si_no_existe(self):
+        self.demo.delete()
+        self.assertEqual(self.entrar().status_code, 200)
+        self.assertTrue(User.objects.filter(email="demo@example.com").exists())

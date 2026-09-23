@@ -157,3 +157,10 @@ else:
 # IA_MODELO vacío = modelo por defecto del proveedor (ver time_tracker/ia.py).
 IA_MODELO = os.environ.get("IA_MODELO", "")
 IA_LIMITE_DIARIO = int(os.environ.get("IA_LIMITE_DIARIO", "40"))
+
+# Cuenta de demostración pública (ver time_tracker/demo.py). La contraseña es pública:
+# el frontend la usa en el botón "Probar la demo".
+DEMO_EMAIL = "demo@example.com"
+DEMO_PASSWORD = "demo-mi-jornada"
+# Límite diario de la IA para la cuenta demo, compartido por todos los visitantes
+IA_LIMITE_DEMO = int(os.environ.get("IA_LIMITE_DEMO", "15"))
