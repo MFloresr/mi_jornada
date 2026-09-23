@@ -264,3 +264,8 @@ class DemoTests(TestCase):
         self.demo.delete()
         self.assertEqual(self.entrar().status_code, 200)
         self.assertTrue(User.objects.filter(email="demo@example.com").exists())
+
+    def test_importes_calculados(self):
+        r = Registro.objects.filter(usuario=self.demo, descanso_comida=True).first()
+        horas = r.duracion_trabajada.total_seconds() / 3600
+        self.assertEqual(float(r.sueldo_registro), round(horas * 12.5, 2))

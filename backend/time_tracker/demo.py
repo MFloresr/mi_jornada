@@ -52,20 +52,24 @@ def preparar_demo():
     hoy = timezone.localdate()
     azar = random.Random(hoy.toordinal())
     sueldo = user.profile.sueldo_por_hora
+    registros = []
+
+    def registro(dia, entrada, salida, lugar, descripcion, comida=False):
+        r = Registro(usuario=user, fecha=dia, hora_entrada=time(entrada), hora_salida=time(salida), lugar=lugar,
+                     descripcion=descripcion, descanso_comida=comida, sueldo_por_hora=sueldo)
+        r.calcular_duraciones_y_sueldo()  # bulk_create no llama a save()
+        registros.append(r)
+
     dia = hoy - timedelta(days=35)
     while dia < hoy:
         if dia.weekday() < 5:
             lugar = azar.choices(LUGARES, [5, 3, 2])[0]
             if azar.random() < 0.35:  # jornada partida
-                Registro.objects.create(usuario=user, fecha=dia, hora_entrada=time(8), hora_salida=time(14),
-                                        lugar=lugar, descripcion="Montaje", sueldo_por_hora=sueldo)
-                Registro.objects.create(usuario=user, fecha=dia, hora_entrada=time(16),
-                                        hora_salida=time(azar.choice([18, 19])), lugar=lugar,
-                                        descripcion="Acabados", sueldo_por_hora=sueldo)
+                registro(dia, 8, 14, lugar, "Montaje")
+                registro(dia, 16, azar.choice([18, 19]), lugar, "Acabados")
             else:
-                Registro.objects.create(usuario=user, fecha=dia, hora_entrada=time(azar.choice([7, 8])),
-                                        hora_salida=time(azar.choice([16, 17])), lugar=lugar,
-                                        descanso_comida=True, descripcion=azar.choice(DESCRIPCIONES),
-                                        sueldo_por_hora=sueldo)
+                registro(dia, azar.choice([7, 8]), azar.choice([16, 17]), lugar, azar.choice(DESCRIPCIONES), comida=True)
         dia += timedelta(days=1)
+    # Una sola consulta: la base de datos está lejos de las funciones de Vercel
+    Registro.objects.bulk_create(registros)
     return user
