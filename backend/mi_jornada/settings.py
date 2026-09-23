@@ -94,11 +94,14 @@ WSGI_APPLICATION = "mi_jornada.wsgi.application"
 # --- Base de datos ---
 # Con DATABASE_URL (p. ej. Postgres de Supabase) se usa esa base;
 # sin ella, SQLite local para desarrollo.
+# conn_max_age=0: la conexión se cierra al acabar cada petición. En Vercel hay
+# muchas instancias a la vez y el pooler de Supabase en modo sesión solo admite
+# 15 clientes; mantenerlas abiertas agotaba las conexiones.
 
 DATABASES = {
     "default": dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600,
+        conn_max_age=0,
         conn_health_checks=True,
         ssl_require=bool(os.environ.get("DATABASE_URL")),
     )
