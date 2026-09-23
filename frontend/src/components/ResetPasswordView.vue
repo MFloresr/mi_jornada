@@ -1,21 +1,9 @@
 <template>
   <div class="min-h-screen bg-base-200 flex items-center justify-center px-4">
     <div class="w-full max-w-md">
-      <!-- Logo -->
-      <div class="flex items-center justify-center gap-2 mb-6">
-        <div
-          class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-success flex items-center justify-center text-base-100 font-bold shadow-md"
-        >
-          MJ
-        </div>
-        <div
-          class="text-xs font-semibold tracking-[0.2em] uppercase text-base-content/70"
-        >
-          Mi Jornada
-        </div>
-      </div>
+      <div class="mb-7 flex justify-center"><Logo grande /></div>
 
-      <div class="card bg-base-100 shadow-xl border border-base-300">
+      <div class="card rounded-[24px] border border-base-300 bg-base-100">
         <div class="card-body">
           <h1 class="card-title justify-center text-lg">Nueva contraseña</h1>
 
@@ -79,6 +67,7 @@
 </template>
 
 <script setup>
+import Logo from "./Logo.vue";
 import { ref } from "vue";
 import api from "../api";
 

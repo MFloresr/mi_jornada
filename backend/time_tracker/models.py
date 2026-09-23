@@ -94,3 +94,15 @@ class PasswordResetToken(models.Model):
         # válido 1 hora
         return self.created_at >= timezone.now() - timedelta(hours=1)
     
+
+class JornadaActiva(models.Model):
+    """Jornada fichada que aún no ha terminado (una como máximo por usuario)."""
+
+    usuario = models.OneToOneField(User, on_delete=models.CASCADE, related_name="jornada_activa")
+    fecha = models.DateField()
+    hora_entrada = models.TimeField()
+    lugar = models.CharField(max_length=200, blank=True)
+    descanso_comida = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.usuario.username} - en curso desde {self.fecha} {self.hora_entrada:%H:%M}"

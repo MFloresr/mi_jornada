@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Profile, Registro
+from .models import JornadaActiva, Profile, Registro
 
 
 @admin.register(Profile)
@@ -21,3 +21,8 @@ class RegistroAdmin(admin.ModelAdmin):
     )
     list_filter = ("usuario", "fecha", "lugar", "descanso_comida")
     search_fields = ("usuario__username", "descripcion", "lugar")
+
+
+@admin.register(JornadaActiva)
+class JornadaActivaAdmin(admin.ModelAdmin):
+    list_display = ("usuario", "fecha", "hora_entrada", "lugar", "descanso_comida")
