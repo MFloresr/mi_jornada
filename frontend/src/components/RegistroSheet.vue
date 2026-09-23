@@ -1,6 +1,8 @@
 <script setup>
 // Formulario para crear o editar un registro de jornada
 import { computed, ref, watch } from "vue";
+import AsistenteIA from "./AsistenteIA.vue";
+import ConfirmarIA from "./ConfirmarIA.vue";
 import Hoja from "./Hoja.vue";
 import Icono from "./Icono.vue";
 import { avisar, descartarJornada, eliminarRegistro, estado, guardarRegistro } from "../store";
@@ -23,9 +25,28 @@ const sueldo = ref("");
 const masOpciones = ref(false);
 const guardando = ref(false);
 const error = ref("");
+const resultadoIA = ref(null);
+const textoIA = ref(""); // se conserva al volver de la confirmación
+const autoIA = ref(false); // enviar al abrir (texto escrito en la barra del escritorio)
 
 const editando = computed(() => !!props.registro?.id);
-const titulo = computed(() => (editando.value ? "Editar registro" : "Nuevo registro"));
+const conIA = computed(() => !editando.value && !!estado.usuario?.ia_disponible);
+const titulo = computed(() => {
+  if (resultadoIA.value) return "Esto es lo que he entendido";
+  return editando.value ? "Editar registro" : "Nuevo registro";
+});
+
+function alEntenderIA(r) {
+  textoIA.value = r.texto;
+  autoIA.value = false;
+  resultadoIA.value = r;
+}
+
+/** "No es esto": vuelve al formulario con el primer tramo entendido */
+function corregirIA(tramo) {
+  resultadoIA.value = null;
+  if (tramo) rellenar({ ...tramo, id: undefined });
+}
 
 /** Rellena el formulario con un registro (o lo vacía) */
 function rellenar(r = {}) {
@@ -43,7 +64,11 @@ function rellenar(r = {}) {
 watch(
   () => [props.abierta, props.registro],
   ([abierta]) => {
-    if (abierta) rellenar(props.registro || {});
+    if (!abierta) return;
+    resultadoIA.value = null;
+    textoIA.value = props.registro?.textoIA || "";
+    autoIA.value = !!textoIA.value;
+    rellenar(props.registro || {});
   },
   { immediate: true },
 );
@@ -114,8 +139,15 @@ async function borrar() {
 
 <template>
   <Hoja :abierta="abierta" :titulo="titulo" @cerrar="emit('cerrar')">
-    <form id="form-registro" class="flex flex-col gap-5 pt-1" @submit.prevent="guardar">
-      <slot name="arriba" />
+    <ConfirmarIA v-if="resultadoIA" :resultado="resultadoIA" @guardado="emit('cerrar')" @corregir="corregirIA" />
+
+    <form v-else id="form-registro" class="flex flex-col gap-5 pt-1" @submit.prevent="guardar">
+      <template v-if="conIA">
+        <AsistenteIA :texto-inicial="textoIA" :auto-enviar="autoIA" @resultado="alEntenderIA" />
+        <div class="flex items-center gap-3 text-[13px] text-base-content/70" aria-hidden="true">
+          <span class="h-px flex-1 bg-base-300"></span>o a mano<span class="h-px flex-1 bg-base-300"></span>
+        </div>
+      </template>
 
       <fieldset class="flex flex-col gap-2">
         <legend class="mb-2 text-sm font-semibold">Día</legend>
@@ -222,7 +254,7 @@ async function borrar() {
       </button>
     </form>
 
-    <template #pie>
+    <template v-if="!resultadoIA" #pie>
       <div class="flex items-center gap-4">
         <div class="flex flex-1 flex-col">
           <span class="cifra text-lg font-bold">{{ segundos > 0 ? horas(segundos) : "—" }}</span>

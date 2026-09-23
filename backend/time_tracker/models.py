@@ -106,3 +106,19 @@ class JornadaActiva(models.Model):
 
     def __str__(self):
         return f"{self.usuario.username} - en curso desde {self.fecha} {self.hora_entrada:%H:%M}"
+
+
+class UsoIA(models.Model):
+    """Peticiones al asistente de IA por usuario y día (para limitar el gasto)."""
+
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE, related_name="usos_ia")
+    dia = models.DateField()
+    peticiones = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["usuario", "dia"], name="uso_ia_unico_por_dia"),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario.username} - {self.dia}: {self.peticiones}"

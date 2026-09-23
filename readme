@@ -39,9 +39,20 @@ Vue, e incluye autenticación, dashboard, calendario y una API REST.
 - Filtros por usuario, fecha, lugar y descanso de comida.
 - Búsqueda por usuario, descripción y lugar.
 
+### Asistente de IA
+
+- Registro de jornadas escribiendo o dictando en lenguaje natural:
+  «ayer de 8 a 14 y de 16 a 19 en la obra de Sants».
+- Claude (API de Anthropic) convierte el texto en uno o varios registros
+  (resuelve fechas relativas, separa tramos y reconoce los lugares habituales).
+- Nada se guarda hasta que el usuario lo revisa y confirma; puede cambiar
+  cada tramo o corregirlo a mano.
+- Dictado por voz con el reconocimiento del navegador (o el micrófono del teclado).
+- Límite de usos diarios por usuario para controlar el gasto.
+- Solo se activa si está definida la variable `ANTHROPIC_API_KEY`.
+
 ### En desarrollo
 
-- Registro de jornadas escribiendo o dictando en lenguaje natural (IA).
 - Mejoras adicionales de seguridad y despliegue.
 
 ## Tecnologías
@@ -61,6 +72,10 @@ Vue, e incluye autenticación, dashboard, calendario y una API REST.
 - TailwindCSS
 - DaisyUI
 - JavaScript
+
+### IA
+
+- API de Claude (SDK oficial `anthropic` para Python) con salidas estructuradas
 
 ### Despliegue
 
@@ -132,6 +147,11 @@ Jornada fichada que todavía no ha terminado (como máximo una por usuario):
 fecha, hora de entrada, lugar y descanso de comida. Al terminarla se crea el
 `Registro` correspondiente y se borra.
 
+### UsoIA
+
+Número de peticiones al asistente por usuario y día, para aplicar el límite
+diario (`IA_LIMITE_DIARIO`).
+
 El sueldo por hora se conserva en cada registro para mantener el historial
 aunque el usuario cambie posteriormente su tarifa.
 
@@ -169,6 +189,12 @@ PATCH  /api/jornada/            # cambiar lugar o descanso de comida
 DELETE /api/jornada/            # descartarla
 POST   /api/jornada/iniciar/
 POST   /api/jornada/terminar/   # crea el registro (409 si empezó otro día)
+```
+
+### Asistente de IA
+
+```text
+POST /api/ia/interpretar/   # {"texto": "..."} -> {"registros": [...], "aviso": "..."}; no guarda nada
 ```
 
 ### Utilidades
@@ -296,6 +322,9 @@ Variables de entorno necesarias en Vercel:
 | `DJANGO_ALLOWED_HOSTS` | Opcional: dominios propios separados por comas. |
 | `EMAIL_HOST_USER` | Cuenta de Gmail que envía los correos de recuperación. |
 | `EMAIL_HOST_PASSWORD` | Contraseña de aplicación de esa cuenta de Gmail. |
+| `ANTHROPIC_API_KEY` | Clave de la API de Anthropic. Sin ella el asistente de IA no aparece. |
+| `IA_MODELO` | Opcional: modelo de Claude (por defecto `claude-opus-5`). |
+| `IA_LIMITE_DIARIO` | Opcional: usos del asistente por usuario y día (por defecto 40). |
 
 Las migraciones no se ejecutan en el despliegue: lánzalas desde local con
 `DATABASE_URL` apuntando a la base de producción.

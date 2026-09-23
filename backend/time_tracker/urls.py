@@ -18,6 +18,9 @@ urlpatterns = [
     path("jornada/iniciar/", views.jornada_iniciar_view, name="jornada_iniciar"),
     path("jornada/terminar/", views.jornada_terminar_view, name="jornada_terminar"),
 
+    # Asistente de IA
+    path("ia/interpretar/", views.ia_interpretar_view, name="ia_interpretar"),
+
     # Auth
     path("me/", views.me_view, name="me"),
     path("login/", views.login_view, name="login"),
