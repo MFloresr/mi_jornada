@@ -4,9 +4,28 @@ Aplicación web full-stack para registrar jornadas laborales, calcular horas
 trabajadas y consultar el sueldo generado por cada registro.
 
 El proyecto está desarrollado con un backend Django y una interfaz frontend
-Vue, e incluye autenticación, dashboard, calendario y una API REST.
+Vue, e incluye autenticación, dashboard, calendario, una API REST y un
+asistente de IA para registrar jornadas escribiendo en lenguaje natural.
 
-> Estado: proyecto funcional en desarrollo.
+**Demo en línea:** https://mi-jornada-ashy.vercel.app — pulsa «Probar la demo» para
+entrar sin registrarte con una cuenta ficticia que ya tiene semanas de datos de ejemplo.
+
+> Estado: funcional y desplegado en producción; en mejora continua.
+
+## Capturas
+
+<p align="center">
+  <img src="docs/capturas/hoy.png" width="640" alt="Pantalla Hoy con la barra del asistente de IA, el botón de fichar, el resumen y las horas de los últimos días">
+  <img src="docs/capturas/hoy-movil.png" width="200" alt="La pantalla Hoy en móvil, con navegación inferior">
+</p>
+<p align="center">
+  <img src="docs/capturas/calendario.png" width="420" alt="Calendario mensual con las horas de cada día">
+  <img src="docs/capturas/estadisticas.png" width="420" alt="Estadísticas del mes: horas, importe, media diaria y horas por lugar">
+</p>
+<p align="center">
+  <img src="docs/capturas/registros.png" width="420" alt="Listado de registros con filtros por mes y lugar">
+  <img src="docs/capturas/login.png" width="420" alt="Pantalla de acceso con el botón Probar la demo">
+</p>
 
 ## Funcionalidades
 
@@ -244,10 +263,10 @@ En Linux o macOS:
 source .venv/bin/activate
 ```
 
-Instalar las dependencias:
+Instalar las dependencias (el archivo `requirements.txt` está en la raíz del repositorio):
 
 ```bash
-pip install -r requirements.txt
+pip install -r ../requirements.txt
 ```
 
 Aplicar las migraciones:
@@ -274,7 +293,7 @@ Iniciar Django (con `DJANGO_DEBUG=1` para que sirva los estáticos en local):
 python manage.py runserver
 ```
 
-Pruebas del backend:
+Pruebas del backend (23 pruebas: registros, fichar, estadísticas, asistente de IA, cuentas y demo):
 
 ```bash
 python manage.py test time_tracker
@@ -304,6 +323,9 @@ frontend/src/api.js
 ```
 
 ## Despliegue
+
+En `.env.example` tienes un ejemplo con todas las variables de entorno (la aplicación las lee
+del entorno del sistema; el archivo no se carga solo).
 
 El proyecto se despliega en Vercel desde la rama `main`. Vercel detecta
 Django por `backend/manage.py`, instala `requirements.txt` y ejecuta
@@ -344,19 +366,17 @@ Las migraciones no se ejecutan en el despliegue: lánzalas desde local con
 - Los secretos de producción deben configurarse mediante variables de entorno.
 - La base de datos local no debe subirse al repositorio.
 
-## Capturas
+## Cuenta de demostración
 
-Pendiente de añadir capturas del:
-
-- Login.
-- Dashboard.
-- Calendario.
-- Formulario de nueva jornada.
-- Panel de administración.
+Cualquiera puede probar la aplicación con el botón «Probar la demo» (o entrando en `/?demo=1`).
+Es una cuenta ficticia con unas 5 semanas de registros de ejemplo que se regeneran sola si
+nadie la ha usado en la última hora. No puede pedir recuperación de contraseña, no tiene
+permisos de administración y tiene su propio límite diario de uso del asistente de IA
+(`IA_LIMITE_DEMO`). Para regenerarla a mano: `python manage.py preparar_demo`.
 
 ## Autor
 
 Mario Flores Rodríguez
 
-- GitHub: [MFlowsr](https://github.com/MFloresr)
+- GitHub: [MFloresr](https://github.com/MFloresr)
 - Proyecto: [Mi Jornada](https://github.com/MFloresr/mi_jornada)
