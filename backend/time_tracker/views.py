@@ -1,5 +1,6 @@
 import json
 import logging
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout, get_user_model
@@ -262,27 +263,48 @@ def password_reset_confirm_view(request, token):
 
 
 # ---------- Sesión actual ----------
-@require_GET
+SUELDO_MAXIMO = Decimal("999.99")
+
+
+def _datos_me(user):
+    profile = getattr(user, "profile", None)
+    return {
+        "username": user.username,
+        "email": user.email,
+        "nombre": user.first_name or user.username,
+        "es_admin": user.is_superuser or user.is_staff,
+        "sueldo_por_hora": float(profile.sueldo_por_hora) if profile else 10.0,
+        "ia_disponible": ia.disponible(),
+    }
+
+
+@require_http_methods(["GET", "PATCH"])
 def me_view(request):
     """
-    Datos del usuario con sesión iniciada (401 si no hay sesión).
-    Permite a la SPA recuperar la sesión al recargar la página.
+    GET: datos del usuario con sesión iniciada (401 si no hay sesión). Permite a la SPA
+    recuperar la sesión al recargar la página.
+    PATCH: cambia el sueldo por hora del propio usuario. Solo afecta a los registros nuevos:
+    cada registro guarda el sueldo que tenía al crearse.
     """
     user = request.user
     if not user.is_authenticated:
         return JsonResponse({"detail": "Sin sesión"}, status=401)
 
-    profile = getattr(user, "profile", None)
-    return JsonResponse(
-        {
-            "username": user.username,
-            "email": user.email,
-            "nombre": user.first_name or user.username,
-            "es_admin": user.is_superuser or user.is_staff,
-            "sueldo_por_hora": float(profile.sueldo_por_hora) if profile else 10.0,
-            "ia_disponible": ia.disponible(),
-        }
-    )
+    if request.method == "PATCH":
+        try:
+            body = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return HttpResponseBadRequest("JSON inválido")
+        try:
+            sueldo = Decimal(str(body.get("sueldo_por_hora", "")).replace(",", ".")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        except (InvalidOperation, ValueError):
+            return JsonResponse({"detail": "Escribe un importe válido."}, status=400)
+        if not Decimal("0.01") <= sueldo <= SUELDO_MAXIMO:
+            return JsonResponse({"detail": "El sueldo por hora debe estar entre 0,01 € y 999,99 €."}, status=400)
+        user.profile.sueldo_por_hora = sueldo
+        user.profile.save(update_fields=["sueldo_por_hora"])
+
+    return JsonResponse(_datos_me(user))
 
 
 # ---------- Fichar: jornada en curso ----------
