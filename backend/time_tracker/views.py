@@ -6,6 +6,7 @@ from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.core.mail import send_mail
 from django.db import connection
 from django.db.models import Count, F, Sum
@@ -82,9 +83,8 @@ def login_view(request):
     if email.lower() == settings.DEMO_EMAIL.lower() and not UserModel.objects.filter(email__iexact=email).exists():
         preparar_demo()
 
-    try:
-        user = UserModel.objects.get(email=email)
-    except UserModel.DoesNotExist:
+    user = UserModel.objects.filter(email__iexact=email).order_by("id").first()
+    if user is None:
         return JsonResponse({"detail": "Credenciales inválidas"}, status=400)
 
     user = authenticate(request, username=user.username, password=password)
@@ -92,8 +92,10 @@ def login_view(request):
         return JsonResponse({"detail": "Credenciales inválidas"}, status=400)
 
     # Cuenta demo: si nadie la ha usado en la última hora, datos limpios
+    # (preparar_demo cambia el hash de la contraseña: hay que entrar con el usuario que devuelve,
+    # si no la sesión queda invalidada y la siguiente petición da 401)
     if es_demo(user) and debe_reiniciarse(user):
-        preparar_demo()
+        user = preparar_demo()
 
     login(request, user)
 
@@ -107,6 +109,57 @@ def login_view(request):
             "email": user.email,
             "es_admin": es_admin,
         }
+    )
+
+
+@require_http_methods(["POST"])
+def register_view(request):
+    """
+    Alta de usuario por nombre + email + password. Inicia sesión al terminar.
+    """
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return HttpResponseBadRequest("JSON inválido")
+
+    nombre = str(body.get("nombre") or "").strip()[:150]
+    email = str(body.get("email") or "").strip().lower()
+    password = str(body.get("password") or "")
+
+    UserModel = get_user_model()
+    errores = {}
+
+    if not nombre:
+        errores["nombre"] = "Escribe tu nombre."
+
+    try:
+        validate_email(email)
+    except ValidationError:
+        errores["email"] = "Introduce un email válido."
+    else:
+        if (
+            email == settings.DEMO_EMAIL.lower()
+            or UserModel.objects.filter(email__iexact=email).exists()
+            or UserModel.objects.filter(username=email[:150]).exists()
+        ):
+            errores["email"] = "Ya hay una cuenta con este email. ¿Quieres entrar?"
+
+    try:
+        validate_password(password, UserModel(username=email, email=email, first_name=nombre))
+    except ValidationError as e:
+        errores["password"] = " ".join(e.messages)
+
+    if errores:
+        return JsonResponse({"detail": next(iter(errores.values())), "errores": errores}, status=400)
+
+    user = UserModel.objects.create_user(
+        username=email[:150], email=email, password=password, first_name=nombre
+    )
+    login(request, user)
+
+    return JsonResponse(
+        {"ok": True, "detail": "Cuenta creada", "username": user.username, "email": user.email, "es_admin": False},
+        status=201,
     )
 
 

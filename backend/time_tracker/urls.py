@@ -24,6 +24,7 @@ urlpatterns = [
     # Auth
     path("me/", views.me_view, name="me"),
     path("login/", views.login_view, name="login"),
+    path("register/", views.register_view, name="register"),
     path("logout/", views.logout_view, name="logout"),
     path("password-reset/", views.password_reset_request_view, name="password_reset_request"),
     path("password-reset/<str:token>/", views.password_reset_confirm_view, name="password_reset_confirm"),
