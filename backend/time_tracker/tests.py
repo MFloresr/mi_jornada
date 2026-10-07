@@ -231,6 +231,8 @@ class DemoTests(TestCase):
         User.objects.filter(pk=self.demo.pk).update(last_login=timezone.now() - timedelta(hours=2))
         self.assertEqual(self.entrar().status_code, 200)
         self.assertGreater(Registro.objects.filter(usuario=self.demo).count(), 15)
+        # La sesión sigue siendo válida tras regenerar la demo (antes devolvía 401)
+        self.assertEqual(self.client.get("/api/me/").status_code, 200)
 
     def test_login_no_reinicia_si_se_esta_usando(self):
         from django.utils import timezone
@@ -269,3 +271,52 @@ class DemoTests(TestCase):
         r = Registro.objects.filter(usuario=self.demo, descanso_comida=True).first()
         horas = r.duracion_trabajada.total_seconds() / 3600
         self.assertEqual(float(r.sueldo_registro), round(horas * 12.5, 2))
+
+
+class RegistroUsuarioTests(TestCase):
+    def registrar(self, **datos):
+        base = {"nombre": "Ana", "email": "Ana@Example.com", "password": "unaclave-larga-9"}
+        base.update(datos)
+        return self.client.post("/api/register/", data=json.dumps(base), content_type="application/json")
+
+    def test_crea_usuario_y_abre_sesion(self):
+        r = self.registrar()
+        self.assertEqual(r.status_code, 201)
+        u = User.objects.get(email="ana@example.com")
+        self.assertEqual(u.first_name, "Ana")
+        self.assertFalse(u.is_staff or u.is_superuser)
+        self.assertTrue(u.check_password("unaclave-larga-9"))
+        self.assertEqual(self.client.get("/api/me/").status_code, 200)
+
+    def test_entra_despues_con_el_email_sin_distinguir_mayusculas(self):
+        self.registrar()
+        self.client.post("/api/logout/")
+        r = self.client.post(
+            "/api/login/",
+            data=json.dumps({"email": "ANA@example.com", "password": "unaclave-larga-9"}),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 200)
+
+    def test_rechaza_email_repetido(self):
+        User.objects.create_user("ana@example.com", "ana@example.com", "otra-clave-larga-1")
+        r = self.registrar()
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("email", r.json()["errores"])
+        self.assertEqual(User.objects.count(), 1)
+
+    def test_rechaza_clave_debil_email_malo_y_nombre_vacio(self):
+        self.assertIn("password", self.registrar(password="12345678").json()["errores"])
+        self.assertIn("password", self.registrar(password="corta").json()["errores"])
+        self.assertIn("email", self.registrar(email="no-es-un-email").json()["errores"])
+        self.assertIn("nombre", self.registrar(nombre="  ").json()["errores"])
+        self.assertEqual(User.objects.count(), 0)
+
+    def test_no_se_puede_registrar_el_email_de_la_demo(self):
+        r = self.registrar(email="demo@example.com")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("email", r.json()["errores"])
+
+    def test_usuario_nuevo_tiene_perfil(self):
+        self.registrar()
+        self.assertEqual(float(User.objects.get(email="ana@example.com").profile.sueldo_por_hora), 10.0)
