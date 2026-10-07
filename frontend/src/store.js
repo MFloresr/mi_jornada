@@ -34,6 +34,12 @@ export async function comprobarSesion() {
   }
 }
 
+/** Cambia el sueldo por hora del usuario. Solo afecta a los registros nuevos. Lanza el error para mostrarlo. */
+export async function guardarSueldo(valor) {
+  const r = await api.patch("me/", { sueldo_por_hora: valor });
+  estado.usuario = r.data;
+}
+
 export async function cerrarSesion() {
   try {
     await api.post("logout/");

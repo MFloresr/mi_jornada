@@ -320,3 +320,46 @@ class RegistroUsuarioTests(TestCase):
     def test_usuario_nuevo_tiene_perfil(self):
         self.registrar()
         self.assertEqual(float(User.objects.get(email="ana@example.com").profile.sueldo_por_hora), 10.0)
+
+
+class SueldoPropioTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("ana", "ana@example.com", "clave-segura-123")
+        self.client.force_login(self.user)
+
+    def cambiar(self, valor):
+        return self.client.patch("/api/me/", data=json.dumps({"sueldo_por_hora": valor}), content_type="application/json")
+
+    def test_por_defecto_son_10_euros(self):
+        self.assertEqual(self.client.get("/api/me/").json()["sueldo_por_hora"], 10.0)
+
+    def test_cada_usuario_cambia_el_suyo(self):
+        otro = User.objects.create_user("luis", "luis@example.com", "clave-segura-123")
+        r = self.cambiar(13.5)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["sueldo_por_hora"], 13.5)
+        self.user.profile.refresh_from_db()
+        otro.profile.refresh_from_db()
+        self.assertEqual(float(self.user.profile.sueldo_por_hora), 13.5)
+        self.assertEqual(float(otro.profile.sueldo_por_hora), 10.0)
+
+    def test_acepta_coma_decimal_y_redondea(self):
+        self.assertEqual(self.cambiar("12,345").json()["sueldo_por_hora"], 12.35)
+
+    def test_rechaza_importes_no_validos(self):
+        for malo in (0, -5, 1000, "abc", "", None):
+            self.assertEqual(self.cambiar(malo).status_code, 400, malo)
+        self.user.profile.refresh_from_db()
+        self.assertEqual(float(self.user.profile.sueldo_por_hora), 10.0)
+
+    def test_sin_sesion_no_puede_cambiarlo(self):
+        self.client.logout()
+        self.assertEqual(self.cambiar(20).status_code, 401)
+
+    def test_no_cambia_los_registros_que_ya_existen(self):
+        r = Registro(usuario=self.user, fecha=date(2026, 10, 1), hora_entrada=time(8), hora_salida=time(16), sueldo_por_hora=10)
+        r.calcular_duraciones_y_sueldo()
+        r.save()
+        antes = Registro.objects.get(pk=r.pk).sueldo_registro
+        self.cambiar(20)
+        self.assertEqual(Registro.objects.get(pk=r.pk).sueldo_registro, antes)
