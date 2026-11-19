@@ -198,9 +198,13 @@ async function borrar() {
           type="text"
           maxlength="200"
           autocomplete="off"
+          list="lista-lugares-reg"
           placeholder="Ej.: Obra Sants"
           class="input h-13 w-full bg-base-100 text-base"
         />
+        <datalist id="lista-lugares-reg">
+          <option v-for="l in estado.lugares" :key="l" :value="l" />
+        </datalist>
         <div v-if="sugerencias.length" class="flex flex-wrap gap-2">
           <button
             v-for="l in sugerencias"

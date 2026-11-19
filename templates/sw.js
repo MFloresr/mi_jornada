@@ -4,14 +4,14 @@
 // Solo guarda la propia app (HTML, JS, CSS, iconos y tipografías). Los datos de la persona NO pasan
 // por aquí: los guarda la app en IndexedDB y se borran al cerrar sesión.
 
-const VERSION = "3750a566d2";
+const VERSION = "298e0df580";
 const CACHE = `mi-jornada-${VERSION}`;
 const CACHE_FUENTES = "mi-jornada-fuentes";
 const PRECACHE = [
   "/",
   "/static/favicon.svg",
-  "/static/assets/index-DiqPejdE.css",
-  "/static/assets/index-Ds10wBcQ.js",
+  "/static/assets/index-C-HrGWj4.css",
+  "/static/assets/index-DxlCvCD1.js",
   "/static/icons/apple-touch-icon.png",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
