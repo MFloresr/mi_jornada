@@ -107,6 +107,7 @@ function duplicar(r) {
             <div v-for="r in detalle.registros" :key="r.id" class="flex flex-col gap-2.5 border-t border-base-300 pt-3 first-of-type:border-t-0 first-of-type:pt-0">
               <span class="cifra text-sm text-base-content/70">
                 {{ r.hora_entrada }} – {{ r.hora_salida }} · {{ r.lugar }}{{ r.descanso_comida ? " · con comida" : "" }}
+                <span v-if="r.pendiente" class="ml-2 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-content">Sin enviar</span>
               </span>
               <p v-if="r.descripcion" class="text-sm">{{ r.descripcion }}</p>
               <div class="flex gap-2">

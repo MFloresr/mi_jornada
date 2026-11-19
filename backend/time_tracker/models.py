@@ -38,6 +38,10 @@ class Registro(models.Model):
         help_text="Sueldo por hora aplicado a este registro"
     )
 
+    # Identificador que genera el dispositivo al crear el registro. Permite reenviarlo
+    # (por ejemplo, al recuperar la conexión) sin que se duplique.
+    client_id = models.UUIDField(null=True, blank=True, editable=False)
+
     # Campos calculados automáticamente
     duracion_total = models.DurationField(editable=False)
     duracion_trabajada = models.DurationField(editable=False)
@@ -50,6 +54,13 @@ class Registro(models.Model):
 
     class Meta:
         ordering = ["-fecha", "-hora_entrada"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["usuario", "client_id"],
+                condition=models.Q(client_id__isnull=False),
+                name="registro_client_id_unico_por_usuario",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.usuario.username} - {self.fecha} ({self.duracion_trabajada})"

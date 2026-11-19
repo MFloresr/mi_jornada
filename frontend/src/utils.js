@@ -47,6 +47,10 @@ export function aFecha(iso) {
 }
 
 export const hoyISO = () => isoFecha(new Date());
+/** Hora actual del dispositivo como "HH:MM" */
+export function ahoraHHMM(d = new Date()) {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 export function ayerISO() {
   const d = new Date();
   d.setDate(d.getDate() - 1);
@@ -87,6 +91,7 @@ export function segundosEntre(entrada, salida, comida = false) {
 
 /** Primer mensaje legible de un error de la API (DRF o JsonResponse) */
 export function mensajeError(err, porDefecto = "Ha ocurrido un error") {
+  if (err?.esValidacion) return err.message; // comprobado en el propio dispositivo
   const data = err?.response?.data;
   if (!data) return err?.response ? porDefecto : "Sin conexión con el servidor";
   if (typeof data === "string") return porDefecto;

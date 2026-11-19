@@ -1,5 +1,7 @@
 import json
 import logging
+import uuid
+from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django.conf import settings
@@ -9,7 +11,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.core.mail import send_mail
-from django.db import connection
+from django.db import IntegrityError, connection
 from django.db.models import Count, F, Sum
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.utils.crypto import get_random_string
@@ -308,10 +310,49 @@ def me_view(request):
 
 
 # ---------- Fichar: jornada en curso ----------
+# Al fichar sin conexión el móvil guarda la hora exacta y la envía al recuperarla.
+TOLERANCIA_FUTURO = timedelta(minutes=5)
+MAX_ANTIGUEDAD = timedelta(days=60)
+
+
 def _ahora():
     """Fecha y hora local (TIME_ZONE) sin segundos."""
     ahora = timezone.localtime()
     return ahora.date(), ahora.time().replace(second=0, microsecond=0)
+
+
+def _momento(data, clave_hora):
+    """
+    Fecha y hora de un fichaje. Si el dispositivo las envía (fichaje hecho sin conexión) se
+    usan tras comprobarlas; si no, las del servidor. Lanza ValueError con un mensaje legible.
+    """
+    fecha_txt, hora_txt = data.get("fecha"), data.get(clave_hora)
+    if not fecha_txt and not hora_txt:
+        return _ahora()
+    if not fecha_txt or not hora_txt:
+        raise ValueError("Indica la fecha y la hora.")
+    try:
+        fecha = date.fromisoformat(str(fecha_txt))
+        hora = datetime.strptime(str(hora_txt)[:5], "%H:%M").time()
+    except ValueError:
+        raise ValueError("La fecha o la hora no son válidas.")
+    ahora = timezone.localtime()
+    momento = datetime.combine(fecha, hora, tzinfo=ahora.tzinfo)
+    if momento > ahora + TOLERANCIA_FUTURO:
+        raise ValueError("La hora no puede estar en el futuro.")
+    if momento < ahora - MAX_ANTIGUEDAD:
+        raise ValueError("La fecha es demasiado antigua.")
+    return fecha, hora
+
+
+def _leer_uuid(valor):
+    """UUID enviado por el dispositivo, None si no viene. Lanza ValueError si no es válido."""
+    if not valor:
+        return None
+    try:
+        return uuid.UUID(str(valor))
+    except ValueError:
+        raise ValueError("El identificador no es válido.")
 
 
 @api_view(["GET", "PATCH", "DELETE"])
@@ -344,16 +385,29 @@ def jornada_view(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def jornada_iniciar_view(request):
-    """Empieza una jornada ahora mismo (409 si ya hay una en curso)."""
-    if JornadaActiva.objects.filter(usuario=request.user).exists():
+    """
+    Empieza una jornada. Sin datos usa la hora del servidor; con "fecha" y "hora_entrada"
+    usa la que tomó el dispositivo (fichaje sin conexión).
+    409 si ya hay otra jornada en curso; si es la misma petición reenviada, responde igual que la primera vez.
+    """
+    try:
+        fecha, hora = _momento(request.data, "hora_entrada")
+    except ValueError as e:
+        return Response({"detail": str(e)}, status=400)
+
+    existente = JornadaActiva.objects.filter(usuario=request.user).first()
+    if existente:
+        # Solo si el dispositivo manda su hora: es el reenvío de un fichaje hecho sin conexión
+        if request.data.get("fecha") and existente.fecha == fecha and existente.hora_entrada == hora:
+            return Response({"activa": JornadaActivaSerializer(existente).data})
         return Response({"detail": "Ya tienes una jornada en curso"}, status=409)
 
-    fecha, hora = _ahora()
     jornada = JornadaActiva.objects.create(
         usuario=request.user,
         fecha=fecha,
         hora_entrada=hora,
         lugar=(request.data.get("lugar") or "").strip()[:200],
+        descanso_comida=bool(request.data.get("descanso_comida", False)),
     )
     return Response(
         {"activa": JornadaActivaSerializer(jornada).data},
@@ -365,14 +419,26 @@ def jornada_iniciar_view(request):
 @permission_classes([IsAuthenticated])
 def jornada_terminar_view(request):
     """
-    Termina la jornada en curso: crea el Registro con la hora actual como salida.
+    Termina la jornada en curso: crea el Registro con la hora de salida (la actual o, si el
+    dispositivo la envía con "fecha" y "hora_salida", la que tomó sin conexión).
     Si la jornada empezó otro día, responde 409 para que se guarde a mano.
+    "client_id" evita duplicar el registro si la petición se reenvía.
     """
+    try:
+        client_id = _leer_uuid(request.data.get("client_id"))
+        fecha, hora = _momento(request.data, "hora_salida")
+    except ValueError as e:
+        return Response({"detail": str(e)}, status=400)
+
     jornada = JornadaActiva.objects.filter(usuario=request.user).first()
     if jornada is None:
+        # Si ya se terminó con este identificador, es una petición repetida: devolvemos lo mismo
+        if client_id:
+            ya = Registro.objects.filter(usuario=request.user, client_id=client_id).first()
+            if ya:
+                return Response(RegistroSerializer(ya).data)
         return Response({"detail": "No hay ninguna jornada en curso"}, status=404)
 
-    fecha, hora = _ahora()
     if fecha != jornada.fecha:
         return Response(
             {
@@ -397,6 +463,7 @@ def jornada_terminar_view(request):
     registro = serializer.save(
         usuario=request.user,
         sueldo_por_hora=profile.sueldo_por_hora if profile else 10.00,
+        client_id=client_id,
     )
     jornada.delete()
     return Response(RegistroSerializer(registro).data, status=status.HTTP_201_CREATED)
@@ -531,6 +598,29 @@ class RegistroViewSet(viewsets.ModelViewSet):
                 },
             }
         )
+
+    def create(self, request, *args, **kwargs):
+        """
+        Crea un registro. Si trae un "client_id" que ya existe (el móvil reenvía lo que guardó
+        sin conexión), devuelve el que ya estaba en vez de crear un duplicado.
+        """
+        try:
+            client_id = _leer_uuid(request.data.get("client_id"))
+        except ValueError as e:
+            return Response({"client_id": [str(e)]}, status=400)
+
+        def existente():
+            return Registro.objects.filter(usuario=request.user, client_id=client_id).first()
+
+        if client_id and (ya := existente()):
+            return Response(self.get_serializer(ya).data)
+        try:
+            return super().create(request, *args, **kwargs)
+        except IntegrityError:
+            # Dos envíos a la vez con el mismo identificador: gana el primero
+            if client_id and (ya := existente()):
+                return Response(self.get_serializer(ya).data)
+            raise
 
     def perform_create(self, serializer):
         """
