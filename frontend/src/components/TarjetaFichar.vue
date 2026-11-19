@@ -123,7 +123,10 @@ const descartar = () => {
     </div>
     <div class="flex flex-col gap-2">
       <label for="fichar-lugar" class="text-sm font-semibold">Lugar</label>
-      <input id="fichar-lugar" v-model="lugarNuevo" type="text" maxlength="200" placeholder="Ej.: Obra Sants" class="input h-12 w-full bg-base-100 text-base" />
+      <input id="fichar-lugar" v-model="lugarNuevo" type="text" maxlength="200" autocomplete="off" list="lista-lugares-fichar" placeholder="Ej.: Obra Sants" class="input h-12 w-full bg-base-100 text-base" />
+      <datalist id="lista-lugares-fichar">
+        <option v-for="l in estado.lugares" :key="l" :value="l" />
+      </datalist>
       <div v-if="estado.lugares.length" class="flex flex-wrap gap-2">
         <button
           v-for="l in estado.lugares.slice(0, 3)"
