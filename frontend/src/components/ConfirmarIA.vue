@@ -51,14 +51,20 @@ async function guardar() {
   }
   guardando.value = true;
   const lista = tramos.value.map(({ clave, ...t }) => ({ ...t, sueldo_por_hora: null }));
-  const { guardados, error: fallo } = await guardarVarios(lista);
+  const { guardados, error: fallo, pendiente } = await guardarVarios(lista);
   guardando.value = false;
   if (fallo) {
     tramos.value.splice(0, guardados);
     error.value = `${guardados ? `Se guardaron ${guardados}. ` : ""}${mensajeError(fallo, "No se pudo guardar")}`;
     return;
   }
-  avisar(guardados === 1 ? "Registro guardado" : `${guardados} registros guardados`);
+  avisar(
+    pendiente
+      ? "Guardado en este dispositivo. Se enviará al volver la conexión."
+      : guardados === 1
+        ? "Registro guardado"
+        : `${guardados} registros guardados`,
+  );
   emit("guardado");
 }
 </script>

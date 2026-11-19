@@ -1,5 +1,6 @@
 // src/api.js
 import axios from "axios";
+import { marcarConexion } from "./offline/red";
 
 function getCookie(name) {
   const value = `; ${document.cookie}`;
@@ -12,6 +13,8 @@ const api = axios.create({
   // Mismo dominio que Django; en desarrollo Vite redirige /api a runserver
   baseURL: "/api/",
   withCredentials: true,
+  // Sin esto, con mala cobertura una petición podría quedarse colgada para siempre
+  timeout: 20000,
 });
 
 // Config para Django (por si Axios xsrf funciona)
@@ -28,5 +31,17 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Cada respuesta demuestra que hay conexión; un fallo sin respuesta, que no la hay
+api.interceptors.response.use(
+  (respuesta) => {
+    marcarConexion(true);
+    return respuesta;
+  },
+  (error) => {
+    marcarConexion(!!error.response);
+    return Promise.reject(error);
+  },
+);
 
 export default api;

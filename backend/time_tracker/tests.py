@@ -363,3 +363,137 @@ class SueldoPropioTests(TestCase):
         antes = Registro.objects.get(pk=r.pk).sueldo_registro
         self.cambiar(20)
         self.assertEqual(Registro.objects.get(pk=r.pk).sueldo_registro, antes)
+
+
+class SincronizacionTests(BaseAPITest):
+    """Lo que necesita el modo sin conexión: reenvíos sin duplicados y fichajes con la hora del dispositivo."""
+
+    ID = "5f1e0d6a-2c4b-4b6e-9a43-0f2f6a3b7c11"
+
+    def crear(self, **extra):
+        datos = {"fecha": "2026-09-22", "hora_entrada": "08:00", "hora_salida": "17:00", "lugar": "Obra Sants"}
+        datos.update(extra)
+        return self.client.post("/api/registros/", datos, format="json")
+
+    def test_reenviar_un_registro_no_lo_duplica(self):
+        primero = self.crear(client_id=self.ID)
+        segundo = self.crear(client_id=self.ID)
+        self.assertEqual(primero.status_code, 201)
+        self.assertEqual(segundo.status_code, 200)
+        self.assertEqual(primero.json()["id"], segundo.json()["id"])
+        self.assertEqual(Registro.objects.count(), 1)
+
+    def test_el_identificador_es_por_usuario(self):
+        otro = User.objects.create_user("lucia", "lucia@example.com", "clave-segura-123")
+        self.crear(client_id=self.ID)
+        cliente_otro = APIClient()
+        cliente_otro.force_authenticate(otro)
+        r = cliente_otro.post(
+            "/api/registros/",
+            {"fecha": "2026-09-22", "hora_entrada": "08:00", "hora_salida": "17:00", "lugar": "Taller", "client_id": self.ID},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(Registro.objects.count(), 2)
+
+    def test_identificador_no_valido(self):
+        self.assertEqual(self.crear(client_id="esto-no-es-un-uuid").status_code, 400)
+
+    def test_sin_identificador_sigue_funcionando(self):
+        self.assertEqual(self.crear().status_code, 201)
+        self.assertEqual(self.crear().status_code, 201)
+        self.assertEqual(Registro.objects.count(), 2)
+
+    @mock.patch("django.utils.timezone.now", return_value=a_las(2026, 9, 23, 18, 0))
+    def test_fichar_con_la_hora_del_dispositivo(self, _now):
+        r = self.client.post(
+            "/api/jornada/iniciar/",
+            {"fecha": "2026-09-23", "hora_entrada": "08:05", "lugar": "Obra", "descanso_comida": True},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.json()["activa"]["hora_entrada"], "08:05")
+        self.assertTrue(r.json()["activa"]["descanso_comida"])
+
+        r = self.client.post(
+            "/api/jornada/terminar/",
+            {"fecha": "2026-09-23", "hora_salida": "17:10", "client_id": self.ID},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        reg = Registro.objects.get()
+        self.assertEqual((reg.hora_entrada, reg.hora_salida), (time(8, 5), time(17, 10)))
+        self.assertEqual(str(reg.client_id), self.ID)
+        self.assertFalse(JornadaActiva.objects.exists())
+
+    @mock.patch("django.utils.timezone.now", return_value=a_las(2026, 9, 23, 18, 0))
+    def test_reenviar_iniciar_y_terminar_no_duplica(self, _now):
+        inicio = {"fecha": "2026-09-23", "hora_entrada": "08:05", "lugar": "Obra"}
+        self.assertEqual(self.client.post("/api/jornada/iniciar/", inicio, format="json").status_code, 201)
+        # Misma petición repetida: igual de válida, sin error
+        self.assertEqual(self.client.post("/api/jornada/iniciar/", inicio, format="json").status_code, 200)
+        # Otra hora distinta sí es un conflicto real
+        self.assertEqual(
+            self.client.post("/api/jornada/iniciar/", {**inicio, "hora_entrada": "09:00"}, format="json").status_code, 409
+        )
+
+        fin = {"fecha": "2026-09-23", "hora_salida": "17:10", "client_id": self.ID}
+        self.assertEqual(self.client.post("/api/jornada/terminar/", fin, format="json").status_code, 201)
+        repetido = self.client.post("/api/jornada/terminar/", fin, format="json")
+        self.assertEqual(repetido.status_code, 200)
+        self.assertEqual(Registro.objects.count(), 1)
+
+    @mock.patch("django.utils.timezone.now", return_value=a_las(2026, 9, 23, 18, 0))
+    def test_terminar_sin_jornada_ni_identificador_conocido(self, _now):
+        r = self.client.post("/api/jornada/terminar/", {"fecha": "2026-09-23", "hora_salida": "17:10", "client_id": self.ID}, format="json")
+        self.assertEqual(r.status_code, 404)
+
+    @mock.patch("django.utils.timezone.now", return_value=a_las(2026, 9, 23, 18, 0))
+    def test_rechaza_horas_en_el_futuro_o_muy_antiguas_o_mal_escritas(self, _now):
+        def iniciar(**datos):
+            return self.client.post("/api/jornada/iniciar/", datos, format="json")
+
+        self.assertEqual(iniciar(fecha="2026-09-23", hora_entrada="19:00").status_code, 400)   # futuro
+        self.assertEqual(iniciar(fecha="2026-09-24", hora_entrada="08:00").status_code, 400)   # mañana
+        self.assertEqual(iniciar(fecha="2026-01-01", hora_entrada="08:00").status_code, 400)   # muy antigua
+        self.assertEqual(iniciar(fecha="ayer", hora_entrada="08:00").status_code, 400)         # texto
+        self.assertEqual(iniciar(fecha="2026-09-23").status_code, 400)                         # falta la hora
+        self.assertFalse(JornadaActiva.objects.exists())
+
+    @mock.patch("django.utils.timezone.now", return_value=a_las(2026, 9, 24, 7, 0))
+    def test_terminar_otro_dia_con_hora_del_dispositivo_pide_revision(self, _now):
+        JornadaActiva.objects.create(usuario=self.user, fecha=date(2026, 9, 23), hora_entrada=time(22, 0))
+        r = self.client.post("/api/jornada/terminar/", {"fecha": "2026-09-24", "hora_salida": "06:30"}, format="json")
+        self.assertEqual(r.status_code, 409)
+        self.assertTrue(JornadaActiva.objects.exists())
+
+
+class AppInstalableTests(TestCase):
+    """El service worker y el manifiesto se sirven desde la raíz, que es lo que exige el navegador."""
+
+    def test_service_worker_desde_la_raiz(self):
+        r = self.client.get("/sw.js")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("javascript", r["Content-Type"])
+        self.assertEqual(r["Service-Worker-Allowed"], "/")
+        self.assertIn("no-cache", r["Cache-Control"])  # el navegador tiene que mirar siempre si hay uno nuevo
+        contenido = r.content.decode()
+        self.assertNotIn("__VERSION__", contenido)  # lo rellena `npm run build`
+        self.assertNotIn("__PRECACHE__", contenido)
+        self.assertIn('"/"', contenido)  # la página va entre los archivos que se guardan
+
+    def test_manifiesto(self):
+        r = self.client.get("/manifest.webmanifest")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r["Content-Type"], "application/manifest+json")
+        datos = json.loads(r.content)
+        self.assertEqual(datos["display"], "standalone")
+        self.assertEqual(datos["scope"], "/")
+        tamanos = {i["sizes"] for i in datos["icons"]}
+        self.assertTrue({"192x192", "512x512"} <= tamanos)
+        self.assertTrue(any(i["purpose"] == "maskable" for i in datos["icons"]))
+
+    def test_la_pagina_enlaza_el_manifiesto(self):
+        html = self.client.get("/").content.decode()
+        self.assertIn('rel="manifest"', html)
+        self.assertIn("apple-touch-icon", html)

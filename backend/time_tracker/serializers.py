@@ -11,6 +11,8 @@ class RegistroSerializer(serializers.ModelSerializer):
     hora_salida = serializers.TimeField(format="%H:%M")
 
     sueldo_por_hora = serializers.FloatField(required=False, allow_null=True)
+    # Lo genera el dispositivo al crear el registro (para poder reenviarlo sin duplicarlo)
+    client_id = serializers.UUIDField(required=False, allow_null=True)
     # sueldo_registro solo lectura, lo calculas en el modelo
     sueldo_registro = serializers.FloatField(read_only=True)
 
@@ -30,6 +32,7 @@ class RegistroSerializer(serializers.ModelSerializer):
             "lugar",
             "descanso_comida",
             "sueldo_por_hora",
+            "client_id",
             "duracion_total",
             "duracion_trabajada",
             "sueldo_registro",

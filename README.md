@@ -366,6 +366,18 @@ Las migraciones no se ejecutan en el despliegue: lánzalas desde local con
 - Los secretos de producción deben configurarse mediante variables de entorno.
 - La base de datos local no debe subirse al repositorio.
 
+## App instalable y modo sin conexión
+
+Mi Jornada es una PWA: se puede instalar desde el navegador (Perfil → «Instalar app») y abre aunque no haya conexión.
+
+- **Sin conexión:** fichar, crear, editar y borrar registros sigue funcionando. Los cambios se guardan en el dispositivo (IndexedDB, una cola por usuario) y se marcan como «Sin enviar».
+- **Al volver la conexión** se envían solos, en orden. Si el servidor rechaza alguno, aparece en Perfil para reintentarlo o descartarlo. Si la sesión caduca, los cambios se conservan hasta volver a entrar.
+- **Sin duplicados:** cada registro lleva un `client_id` (UUID), así que reenviar el mismo cambio no crea otro. Las horas se envían con la del dispositivo (máx. 5 min en el futuro y 60 días atrás).
+- **Qué necesita conexión:** el asistente de IA y la gestión de cuenta.
+- **Archivos:** `frontend/src/offline/` (cola y almacenamiento), `frontend/pwa/` (manifiesto y service worker) y `frontend/scripts/postbuild.mjs`, que en `npm run build` genera `templates/sw.js`. Django sirve `/sw.js` y `/manifest.webmanifest` desde la raíz.
+- Pruebas de la cola: `npm test` en `frontend/`.
+- Al desplegar hay que aplicar la migración `0005_registro_client_id`.
+
 ## Cuenta de demostración
 
 Cualquiera puede probar la aplicación con el botón «Probar la demo» (o entrando en `/?demo=1`).

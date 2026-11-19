@@ -46,18 +46,18 @@ async function accion(fn, textoError) {
 
 const empezar = () =>
   accion(async () => {
-    await empezarJornada(lugarNuevo.value.trim());
-    avisar("Jornada empezada");
+    const r = await empezarJornada(lugarNuevo.value.trim());
+    avisar(r.pendiente ? "Jornada empezada. Guardada en este dispositivo, se enviará al volver la conexión." : "Jornada empezada");
   }, "No se pudo empezar la jornada");
 
 const terminar = () =>
   accion(async () => {
-    const revisar = await terminarJornada();
-    if (revisar) {
-      avisar(revisar.detail, "error");
-      emit("revisar", revisar.activa);
+    const r = await terminarJornada();
+    if (r.revisar) {
+      avisar(r.revisar.detail, "error");
+      emit("revisar", r.revisar.activa);
     } else {
-      avisar("Jornada guardada");
+      avisar(r.pendiente ? "Jornada guardada en este dispositivo. Se enviará al volver la conexión." : "Jornada guardada");
     }
   }, "No se pudo terminar la jornada");
 
@@ -85,7 +85,8 @@ const descartar = () => {
         <span class="flex items-center gap-2 text-sm font-semibold">
           <span class="size-2 animate-pulse rounded-full bg-vivo motion-reduce:animate-none"></span>Jornada en curso
         </span>
-        <span v-if="jornada.lugar" class="text-[13px] opacity-85">{{ jornada.lugar }}</span>
+        <span v-if="jornada.pendiente" class="rounded-full bg-white/20 px-2.5 py-0.5 text-[12px] font-semibold">Sin enviar</span>
+        <span v-else-if="jornada.lugar" class="text-[13px] opacity-85">{{ jornada.lugar }}</span>
       </div>
       <div class="flex flex-col gap-0.5">
         <span class="cifra font-display text-5xl leading-none font-bold tracking-tight" aria-live="polite">{{ horasMinutos(segundos) }}</span>

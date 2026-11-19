@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node -e \"require('fs').renameSync('../backend/static/index.html', '../templates/index.html')\"",
-    "preview": "vite preview"
+    "build": "vite build && node scripts/postbuild.mjs",
+    "preview": "vite preview",
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "axios": "^1.16.1",

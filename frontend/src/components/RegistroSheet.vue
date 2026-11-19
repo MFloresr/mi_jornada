@@ -6,6 +6,7 @@ import ConfirmarIA from "./ConfirmarIA.vue";
 import Hoja from "./Hoja.vue";
 import Icono from "./Icono.vue";
 import { avisar, descartarJornada, eliminarRegistro, estado, guardarRegistro } from "../store";
+import { red } from "../offline/red";
 import { ayerISO, euros, horas, hoyISO, mensajeError, segundosEntre } from "../utils";
 
 const props = defineProps({
@@ -30,7 +31,7 @@ const textoIA = ref(""); // se conserva al volver de la confirmación
 const autoIA = ref(false); // enviar al abrir (texto escrito en la barra del escritorio)
 
 const editando = computed(() => !!props.registro?.id);
-const conIA = computed(() => !editando.value && !!estado.usuario?.ia_disponible);
+const conIA = computed(() => !editando.value && !!estado.usuario?.ia_disponible && !red.sinConexion);
 const titulo = computed(() => {
   if (resultadoIA.value) return "Esto es lo que he entendido";
   return editando.value ? "Editar registro" : "Nuevo registro";
@@ -103,7 +104,7 @@ async function guardar() {
   guardando.value = true;
   try {
     const propio = parseFloat(String(sueldo.value).replace(",", "."));
-    await guardarRegistro(
+    const r = await guardarRegistro(
       {
         fecha: fecha.value,
         hora_entrada: entrada.value,
@@ -116,7 +117,7 @@ async function guardar() {
       props.registro?.id,
     );
     if (props.registro?.desdeJornada) await descartarJornada();
-    avisar(editando.value ? "Registro actualizado" : "Registro guardado");
+    avisar(r.pendiente ? "Guardado en este dispositivo. Se enviará al volver la conexión." : editando.value ? "Registro actualizado" : "Registro guardado");
     emit("cerrar");
   } catch (err) {
     error.value = mensajeError(err, "No se pudo guardar el registro");
@@ -128,8 +129,8 @@ async function guardar() {
 async function borrar() {
   if (!confirm("¿Eliminar este registro? No se puede deshacer.")) return;
   try {
-    await eliminarRegistro(props.registro.id);
-    avisar("Registro eliminado");
+    const r = await eliminarRegistro(props.registro.id);
+    avisar(r.pendiente ? "Eliminado en este dispositivo. Se enviará al volver la conexión." : "Registro eliminado");
     emit("cerrar");
   } catch (err) {
     error.value = mensajeError(err, "No se pudo eliminar");

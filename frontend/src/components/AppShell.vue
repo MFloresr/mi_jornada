@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from "vue";
+import BannerConexion from "./BannerConexion.vue";
 import Icono from "./Icono.vue";
 import Logo from "./Logo.vue";
 import { estado } from "../store";
@@ -48,6 +49,7 @@ const inicial = computed(() => (estado.usuario?.nombre || "?").charAt(0).toUpper
     </aside>
 
     <div class="min-w-0 flex-1 pb-28 md:pb-0">
+      <BannerConexion />
       <slot />
     </div>
 

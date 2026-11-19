@@ -14,9 +14,30 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from pathlib import Path
+
+from django.conf import settings
 from django.contrib import admin
+from django.http import Http404, HttpResponse
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
+
+
+def archivo_de_plantillas(nombre, tipo, cabeceras=None):
+    """Sirve tal cual un archivo de templates/ (sin pasarlo por el motor de plantillas)."""
+    ruta = Path(settings.BASE_DIR).parent / "templates" / nombre
+
+    def vista(request):
+        try:
+            contenido = ruta.read_bytes()
+        except FileNotFoundError:
+            raise Http404(nombre)
+        respuesta = HttpResponse(contenido, content_type=tipo)
+        for clave, valor in (cabeceras or {}).items():
+            respuesta[clave] = valor
+        return respuesta
+
+    return vista
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -24,4 +45,13 @@ urlpatterns = [
     # Enlace del email de recuperación: lo resuelve la SPA
     re_path(r"^reset-password/[^/]+/?$", TemplateView.as_view(template_name="index.html")),
     path('api/', include('time_tracker.urls')),  # API para el frontend
+    # App instalable: el service worker tiene que colgar de la raíz para controlar toda la web
+    path(
+        "sw.js",
+        archivo_de_plantillas("sw.js", "application/javascript; charset=utf-8", {"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"}),
+    ),
+    path(
+        "manifest.webmanifest",
+        archivo_de_plantillas("manifest.webmanifest", "application/manifest+json", {"Cache-Control": "public, max-age=3600"}),
+    ),
 ]

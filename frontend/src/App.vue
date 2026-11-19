@@ -9,7 +9,7 @@ import EstadisticasView from "./views/EstadisticasView.vue";
 import HoyView from "./views/HoyView.vue";
 import PerfilView from "./views/PerfilView.vue";
 import RegistrosView from "./views/RegistrosView.vue";
-import { comprobarSesion, estado } from "./store";
+import { comprobarSesion, estado, iniciarSincronizacionAutomatica } from "./store";
 
 // Enlace del email de recuperación: /reset-password/<token>/
 const resetToken = window.location.pathname.match(/^\/reset-password\/([^/]+)\/?$/)?.[1] ?? null;
@@ -51,6 +51,7 @@ function abrirRegistro(registro = null) {
 
 onMounted(() => {
   window.addEventListener("hashchange", alCambiarHash);
+  iniciarSincronizacionAutomatica();
   if (!resetToken) comprobarSesion();
 });
 onBeforeUnmount(() => window.removeEventListener("hashchange", alCambiarHash));

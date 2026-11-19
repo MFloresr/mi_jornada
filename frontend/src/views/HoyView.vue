@@ -4,6 +4,7 @@ import GraficoBarras from "../components/GraficoBarras.vue";
 import Icono from "../components/Icono.vue";
 import TarjetaFichar from "../components/TarjetaFichar.vue";
 import { estado } from "../store";
+import { red } from "../offline/red";
 import { deLaSemana, delMes, diasRecientes, totales, ultimosDias } from "../metricas";
 import { MESES, diaCorto, diaNumero, euros, eurosRedondo, fechaLarga, horas, hoyISO } from "../utils";
 
@@ -49,7 +50,7 @@ const lugares = (d) => [...new Set(d.registros.map((r) => r.lugar))].join(", ");
     </header>
 
     <form
-      v-if="estado.usuario?.ia_disponible"
+      v-if="estado.usuario?.ia_disponible && !red.sinConexion"
       aria-label="Escribir la jornada con IA"
       class="hidden h-15 items-center gap-3 rounded-2xl border-[1.5px] border-primary bg-base-100 pr-2 pl-4.5 md:flex"
       @submit.prevent="enviarIA"
@@ -114,7 +115,10 @@ const lugares = (d) => [...new Set(d.registros.map((r) => r.lugar))].join(", ");
                 <span class="cifra text-xl font-bold">{{ diaNumero(d.fecha) }}</span>
               </span>
               <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span class="truncate text-[15px] font-semibold">{{ lugares(d) }}</span>
+                <span class="flex items-center gap-2">
+                  <span class="truncate text-[15px] font-semibold">{{ lugares(d) }}</span>
+                  <span v-if="d.registros.some((r) => r.pendiente)" class="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-content">Sin enviar</span>
+                </span>
                 <span class="cifra truncate text-[13px] text-base-content/70">{{ horario(d) }}</span>
               </span>
               <span class="flex flex-col items-end gap-0.5">
